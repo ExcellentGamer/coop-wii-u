@@ -14,7 +14,12 @@
 #include "controller_api.h"
 #include "../configfile.h"
 
-extern void KPADShutdown();
+#ifdef BETTERCAMERA
+int mouse_x = 0;
+int mouse_y = 0;
+
+extern u8 newcam_mouse;
+#endif
 
 struct WiiUKeymap {
     uint32_t n64Button;
@@ -33,19 +38,18 @@ struct WiiUKeymap {
 #define SE(dir) VPAD_STICK_R_EMULATION_##dir, WPAD_CLASSIC_STICK_R_EMULATION_##dir, WPAD_PRO_STICK_R_EMULATION_##dir
 
 struct WiiUKeymap map[] = {
-    { B_BUTTON, VB(A), CB(A), PB(A) },
-    { A_BUTTON, VB(B), CB(B), PB(B) },
+    { B_BUTTON, VB(B) | VB(Y), CB(B) | CB(Y), PB(B) | PB(Y) },
+    { A_BUTTON, VB(A) | VB(X), CB(A) | CB(X), PB(A) | PB(X) },
     { START_BUTTON, VB(PLUS), CB(PLUS), PB(PLUS) },
-    { ZL_TRIG, VB(ZL), CB(ZL), PT(ZL) },
-    { ZR_TRIG, VB(ZR), CB(ZR), PT(ZR) },
-    { L_TRIG, VB(L), CB(L), PT(L) },
-    { R_TRIG, VB(R), CB(R), PT(R) },
+    { Z_TRIG, VB(L) | VB(ZL), CB(L) | CB(ZL), PT(L) | PT(ZL) },
+    { L_TRIG, VB(MINUS), CB(MINUS), PB(MINUS) },
+    { R_TRIG, VB(R) | VB(ZR), CB(R) | CB(ZR), PT(R) | PT(ZR) },
     { U_CBUTTONS, SE(UP) },
     { D_CBUTTONS, SE(DOWN) },
     { L_CBUTTONS, SE(LEFT) },
     { R_CBUTTONS, SE(RIGHT) }
 };
-    
+
 size_t num_buttons = sizeof(map) / sizeof(map[0]);
 KPADStatus last_kpad = {0};
 int kpad_timeout = 10;
@@ -55,6 +59,11 @@ static void controller_wiiu_init(void) {
     KPADInit();
     WPADEnableURCC(1);
     WPADEnableWiiRemote(1);
+
+    if (configN64FaceButtons) {
+        map[0] = (struct WiiUKeymap) { B_BUTTON, VB(Y) | VB(X), CB(Y) | CB(X), PB(Y) | PB(X) };
+        map[1] = (struct WiiUKeymap) { A_BUTTON, VB(B) | VB(A), CB(B) | CB(A), PB(B) | PB(A) };
+    }
 }
 
 static void read_vpad(OSContPad *pad) {
@@ -76,23 +85,16 @@ static void read_vpad(OSContPad *pad) {
         }
     }
 
-    if (v & VPAD_BUTTON_LEFT) pad->button |= L_JPAD;
-    if (v & VPAD_BUTTON_RIGHT) pad->button |= R_JPAD;
-    if (v & VPAD_BUTTON_DOWN) pad->button |= D_JPAD;
-    if (v & VPAD_BUTTON_UP) pad->button |= U_JPAD;
+    if (v & VPAD_BUTTON_LEFT) pad->stick_x = -80;
+    if (v & VPAD_BUTTON_RIGHT) pad->stick_x = 80;
+    if (v & VPAD_BUTTON_DOWN) pad->stick_y = -80;
+    if (v & VPAD_BUTTON_UP) pad->stick_y = 80;
 
     if (status.leftStick.x != 0) {
         pad->stick_x = (s8) round(status.leftStick.x * 80);
     }
     if (status.leftStick.y != 0) {
         pad->stick_y = (s8) round(status.leftStick.y * 80);
-    }
-    
-    if (status.rightStick.x != 0) {
-        pad->ext_stick_x = (s8) round(status.rightStick.x * 80);
-    }
-    if (status.rightStick.y != 0) {
-        pad->ext_stick_y = (s8) round(status.rightStick.y * 80);
     }
 }
 
@@ -130,30 +132,25 @@ static void read_wpad(OSContPad* pad) {
 
     uint32_t wm = status.hold;
     KPADVec2D stick;
-    KPADVec2D rStick;
 
     bool gamepadStickNotSet = pad->stick_x == 0 && pad->stick_y == 0;
-    bool gamepadRightStickNotSet = pad->ext_stick_x == 0 && pad->ext_stick_y == 0;
 
     if (status.extensionType == WPAD_EXT_NUNCHUK || status.extensionType == WPAD_EXT_MPLUS_NUNCHUK) {
         uint32_t ext = status.nunchuck.hold;
         stick = status.nunchuck.stick;
-        rStick = (KPADVec2D) {0.0, 0.0};
 
         if (wm & WPAD_BUTTON_A) pad->button |= A_BUTTON;
         if (wm & WPAD_BUTTON_B) pad->button |= B_BUTTON;
         if (wm & WPAD_BUTTON_PLUS) pad->button |= START_BUTTON;
-        if (wm & WPAD_BUTTON_UP) { pad->button |= U_CBUTTONS; rStick.y += 1.0; }
-        if (wm & WPAD_BUTTON_DOWN) { pad->button |= D_CBUTTONS; rStick.y -= 1.0; }
-        if (wm & WPAD_BUTTON_LEFT) { pad->button |= L_CBUTTONS; rStick.x -= 1.0; }
-        if (wm & WPAD_BUTTON_RIGHT) { pad->button |= R_CBUTTONS; rStick.x += 1.0; }
-        if (wm & WPAD_BUTTON_MINUS) pad->button |= L_TRIG;
+        if (wm & WPAD_BUTTON_UP) pad->button |= U_CBUTTONS;
+        if (wm & WPAD_BUTTON_DOWN) pad->button |= D_CBUTTONS;
+        if (wm & WPAD_BUTTON_LEFT) pad->button |= L_CBUTTONS;
+        if (wm & WPAD_BUTTON_RIGHT) pad->button |= R_CBUTTONS;
         if (ext & WPAD_NUNCHUK_BUTTON_C) pad->button |= R_TRIG;
-        if (ext & WPAD_NUNCHUK_BUTTON_Z) pad->button |= ZR_TRIG;
+        if (ext & WPAD_NUNCHUK_BUTTON_Z) pad->button |= Z_TRIG;
     } else if (status.extensionType == WPAD_EXT_CLASSIC || status.extensionType == WPAD_EXT_MPLUS_CLASSIC) {
         uint32_t ext = status.classic.hold;
         stick = status.classic.leftStick;
-        rStick = status.classic.rightStick;
         for (size_t i = 0; i < num_buttons; i++) {
             if (ext & map[i].classicButton) {
                 pad->button |= map[i].n64Button;
@@ -166,7 +163,6 @@ static void read_wpad(OSContPad* pad) {
     } else if (status.extensionType == WPAD_EXT_PRO_CONTROLLER) {
         uint32_t ext = status.pro.hold;
         stick = status.pro.leftStick;
-        rStick = status.pro.rightStick;
         for (size_t i = 0; i < num_buttons; i++) {
             if (ext & map[i].proButton) {
                 pad->button |= map[i].n64Button;
@@ -187,23 +183,11 @@ static void read_wpad(OSContPad* pad) {
             pad->stick_y = (s8) round(stick.y * 80);
         }
     }
-    
-    if (gamepadRightStickNotSet) {
-        if (rStick.x != 0) {
-            pad->ext_stick_x = (s8) round(rStick.x * 80);
-        }
-        if (rStick.y != 0) {
-            pad->ext_stick_y = (s8) round(rStick.y * 80);
-        }
-    }
 }
 
 static void controller_wiiu_read(OSContPad* pad) {
     pad->stick_x = 0;
     pad->stick_y = 0;
-
-    pad->ext_stick_x = 0;
-    pad->ext_stick_y = 0;
 
     read_vpad(pad);
     read_wpad(pad);
@@ -214,7 +198,6 @@ static u32 controller_wiiu_rawkey(void) {
 }
 
 static void controller_wiiu_shutdown(void) {
-    KPADShutdown();
 }
 
 struct ControllerAPI controller_wiiu = {

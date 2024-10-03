@@ -179,6 +179,7 @@ static void connect_menu_draw_strings(void) {
     print_generic_ascii_string(30, 175, "Type in or paste the host's IP.");
     print_generic_ascii_string(30, 160, "Note - the host must forward a port on their router.");
 
+#ifndef TARGET_WII_U // Todo, also find out how to do this on Wii U
     if (keyboard_in_text_input()) {
         if (strlen(gTextInput) >= 7) {
             print_generic_ascii_string(30, 100, "Press (ENTER) to connect.");
@@ -186,22 +187,29 @@ static void connect_menu_draw_strings(void) {
             print_generic_ascii_string(30, 100, "Press (ESC) to cancel.");
         }
     }
+#endif
 
     gDPSetEnvColor(gDisplayListHead++, 130, 222, 140, gMenuStringAlpha);
+#ifndef TARGET_WII_U
     print_generic_ascii_string(30, 130, gTextInput);
+#endif
 }
 
 static void connect_menu_on_connection_attempt(void) {
     play_sound(SOUND_GENERAL_COIN, gDefaultSoundArgs);
 
+#ifndef TARGET_WII_U
     keyboard_stop_text_input();
+#endif
     if (gNetworkType != NT_NONE) { return; }
 
     char delims[2] = " ";
 
     // copy input
     char buffer[MAX_TEXT_INPUT] = { 0 };
+#ifndef TARGET_WII_U
     strncpy(buffer, gTextInput, MAX_TEXT_INPUT);
+#endif
     char* text = buffer;
 
     // trim whitespace
@@ -231,22 +239,28 @@ static void connect_menu_on_connection_attempt(void) {
 static void connect_menu_on_click(void) {
     sConnectionJoinError[0] = '\0';
 
+#ifndef TARGET_WII_U
     keyboard_start_text_input(TIM_IP, MAX_TEXT_INPUT, custom_menu_close, connect_menu_on_connection_attempt);
+#endif
 
     // fill in our last attempt
     if (configJoinPort == 0 || configJoinPort > 65535) { configJoinPort = DEFAULT_PORT; }
 
     // only print custom port
+#ifndef TARGET_WII_U // Todo: figure this out on wii u pls
     if (configJoinPort == DEFAULT_PORT) {
         sprintf(gTextInput, "%s", configJoinIp);
     }
     else {
         sprintf(gTextInput, "%s %d", configJoinIp, configJoinPort);
     }
+#endif
 }
 
 static void connect_menu_on_close(void) {
+#ifndef TARGET_WII_U
     keyboard_stop_text_input();
+#endif
     network_shutdown();
 }
 

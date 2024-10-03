@@ -127,21 +127,27 @@ void chat_add_message(char* ascii, enum ChatMessageType chatMessageType) {
 
 static void chat_stop_input(void) {
     sInChatInput = FALSE;
+#ifndef TARGET_WII_U
     keyboard_stop_text_input();
+#endif
 }
 
-static void chat_send_input(void) {
+static void chat_send_input(void) { // Todo: Work out a way to do this on wii u
+#ifndef TARGET_WII_U
     sInChatInput = FALSE;
     keyboard_stop_text_input();
     if (strlen(gTextInput) == 0) { return; }
     chat_add_message(gTextInput, CMT_LOCAL);
     // our message has the same color as our shirt
     network_send_chat(gTextInput, get_player_color(gNetworkPlayerLocal->globalIndex, 0));
+#endif
 }
 
 void chat_start_input(void) {
     sInChatInput = TRUE;
+#ifndef TARGET_WII_U
     keyboard_start_text_input(TIM_SINGLE_LINE, CHAT_DIALOG_MAX - 3, chat_stop_input, chat_send_input);
+#endif
 }
 
 void render_chat(void) {
@@ -151,7 +157,9 @@ void render_chat(void) {
         inputMessage.type = CMT_INPUT;
         inputMessage.dialog[0] = 0xFD;
         inputMessage.dialog[1] = 0x9E;
+#ifndef TARGET_WII_U
         str_ascii_to_dialog(gTextInput, &inputMessage.dialog[2], MIN(strlen(gTextInput), CHAT_DIALOG_MAX - 3));
+#endif
         inputMessage.life = CHAT_LIFE_MAX;
         render_chat_message(&inputMessage, count++);
     }

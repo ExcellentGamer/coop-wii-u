@@ -179,7 +179,8 @@ u8 network_player_connected(enum NetworkPlayerType type, u8 globalIndex) {
         if (gNetworkType == NT_SERVER || type == NPT_SERVER) { gNetworkSystem->save_id(i, 0); }
         for (int j = 0; j < MAX_SYNC_OBJECTS; j++) { gSyncObjects[j].rxEventId[i] = 0; }
         if (type == NPT_SERVER) { gNetworkPlayerServer = np; }
-        else { chat_add_message_ext("player connected", CMT_SYSTEM, get_player_color(np->globalIndex, 0)); }
+        else { chat_add_message_ext("player connected", CMT_SYSTEM, get_player_color(np->globalIndex, 0));
+        }
         LOG_INFO("player connected, local %d, global %d", i, np->globalIndex);
         packet_ordered_clear(np->globalIndex);
         return i;
