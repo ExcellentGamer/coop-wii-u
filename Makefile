@@ -54,7 +54,7 @@ EXTERNAL_DATA ?= 0
 # Enable Discord Rich Presence (outdated, no longer supported)
 DISCORDRPC ?= 0
 # Enable Discord Game SDK (used for Discord server hosting)
-DISCORD_SDK ?= 1
+DISCORD_SDK ?= 0
 # Enable docker build workarounds
 DOCKERBUILD ?= 0
 # Enable development/testing flags
@@ -1197,7 +1197,7 @@ $(EXE): $(ELF)
 	@echo built ... $(notdir $@)
 else
 $(EXE): $(O_FILES) $(MIO0_FILES:.mio0=.o) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(BUILD_DIR)/$(RPC_LIBS) $(BUILD_DIR)/$(DISCORD_SDK_LIBS)
-  $(LD) -L $(BUILD_DIR) -o $@ $(O_FILES) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(LDFLAGS)
+	$(LD) -L $(BUILD_DIR) -o $@ $(O_FILES) $(SOUND_OBJ_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(LDFLAGS)
 endif
 
 .PHONY: all clean distclean default diff test load libultra res
