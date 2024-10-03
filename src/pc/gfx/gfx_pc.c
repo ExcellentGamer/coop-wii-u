@@ -46,15 +46,9 @@
 #define RATIO_X (gfx_current_dimensions.width / (2.0f * HALF_SCREEN_WIDTH))
 #define RATIO_Y (gfx_current_dimensions.height / (2.0f * HALF_SCREEN_HEIGHT))
 
-#define MAX_BUFFERED_TRIANGLES 256
+#define MAX_BUFFERED 256
 #define MAX_LIGHTS 8
 #define MAX_VERTICES 64
-
-#ifdef TARGET_WII_U
-#define VERTEX_BUFFER_SIZE MAX_BUFFERED_TRIANGLES * 28 * 3 // 3 vertices in a triangle and 28 floats per vtx
-#else
-#define VERTEX_BUFFER_SIZE MAX_BUFFERED_TRIANGLES * 26 * 3 // 3 vertices in a triangle and 26 floats per vtx
-#endif
 
 #ifdef EXTERNAL_DATA
 # define MAX_CACHED_TEXTURES 4096 // for preloading purposes
@@ -175,7 +169,7 @@ struct GfxDimensions gfx_current_dimensions;
 
 static bool dropped_frame;
 
-static float buf_vbo[VERTEX_BUFFER_SIZE];
+static float buf_vbo[MAX_BUFFERED * (26 * 3)]; // 3 vertices in a triangle and 26 floats per vtx
 static size_t buf_vbo_len;
 static size_t buf_vbo_num_tris;
 
@@ -1017,11 +1011,6 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
             }
             buf_vbo[buf_vbo_len++] = u / tex_width;
             buf_vbo[buf_vbo_len++] = v / tex_height;
-#ifdef TARGET_WII_U
-            // Padding for faster GPU reading
-            buf_vbo[buf_vbo_len++] = 0.0f;
-            buf_vbo[buf_vbo_len++] = 0.0f;
-#endif
         }
         
         if (use_fog) {
@@ -1063,11 +1052,6 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
                     buf_vbo[buf_vbo_len++] = color->r / 255.0f;
                     buf_vbo[buf_vbo_len++] = color->g / 255.0f;
                     buf_vbo[buf_vbo_len++] = color->b / 255.0f;
-#ifdef TARGET_WII_U
-                    if (!use_alpha) {
-                        buf_vbo[buf_vbo_len++] = 1.0f;
-                    }
-#endif
                 } else {
                     if (use_fog && color == &v_arr[i]->color) {
                         // Shade alpha is 100% for fog
@@ -1084,7 +1068,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx) {
         buf_vbo[buf_vbo_len++] = color->b / 255.0f;
         buf_vbo[buf_vbo_len++] = color->a / 255.0f;*/
     }
-    if (++buf_vbo_num_tris == MAX_BUFFERED_TRIANGLES) {
+    if (++buf_vbo_num_tris == MAX_BUFFERED) {
         gfx_flush();
     }
 }

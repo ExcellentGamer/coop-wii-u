@@ -27,18 +27,12 @@ TARGET_RPI ?= 0
 # Build for Emscripten/WebGL
 TARGET_WEB ?= 0
 
-# Build for the Wii U
-TARGET_WII_U ?= 0
-
 # Makeflag to enable OSX fixes
 OSX_BUILD ?= 0
 
 # Specify the target you are building for, TARGET_BITS=0 means native
 TARGET_ARCH ?= native
 TARGET_BITS ?= 0
-
-# PC Port defines from a ported console device
-TARGET_PORT_CONSOLE ?= 0
 
 # Enable immediate load by default
 IMMEDIATELOAD ?= 1
@@ -79,52 +73,9 @@ AUDIO_API ?= SDL2
 # Controller backends (can have multiple, space separated): SDL2, SDL1
 CONTROLLER_API ?= SDL2
 
-# If compiling on wii u set these render apis
-ifeq ($(TARGET_WII_U),1)
-  RENDER_API := GX2
-  WINDOW_API := GX2
-  AUDIO_API := SDL2
-  CONTROLLER_API := WII_U
-  TARGET_PORT_CONSOLE := 1
-endif
-
-# Set up WUT for Wii U
-
-ifeq ($(TARGET_WII_U),1)
-  ifeq ($(strip $(DEVKITPRO)),)
-  $(error "Please set DEVKITPRO in your environment. export DEVKITPRO=<path to>/devkitpro")
-  endif
-
-  ifeq ($(strip $(DEVKITPPC)),)
-  $(error "Please set DEVKITPPC in your environment. export DEVKITPPC=<path to>/devkitPro/devkitPPC")
-  endif
-
-  include $(DEVKITPPC)/base_tools
-
-  PORTLIBS	:=	$(PORTLIBS_PATH)/wiiu $(PORTLIBS_PATH)/ppc
-
-  export PATH := $(PORTLIBS_PATH)/wiiu/bin:$(PORTLIBS_PATH)/ppc/bin:$(PATH)
-
-  WUT_ROOT	?=	$(DEVKITPRO)/wut
-
-  RPXSPECS	:=	-specs=$(WUT_ROOT)/share/wut.specs
-
-  MACHDEP	= -DESPRESSO -mcpu=750 -meabi -mhard-float
-
-  LIBDIRS	    := $(PORTLIBS) $(WUT_ROOT)
-  INCLUDE	    := $(foreach dir,$(LIBDIRS),-I$(dir)/include)
-  LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib)
-endif
-
 # Misc settings for EXTERNAL_DATA
 
-# Base settings for EXTERNAL_DATA
-ifeq ($(TARGET_PORT_CONSOLE),1)
-  BASEDIR ?= sm64coop_res
-else
-  BASEDIR ?= res
-endif
-
+BASEDIR ?= res
 BASEPACK ?= base.zip
 
 # Automatic settings for PC port(s)
@@ -144,10 +95,8 @@ else
 endif
 
 ifeq ($(TARGET_WEB),0)
-  ifeq ($(TARGET_PORT_CONSOLE),0)
-    ifeq ($(HOST_OS),Windows)
-      WINDOWS_BUILD := 1
-    endif
+  ifeq ($(HOST_OS),Windows)
+    WINDOWS_BUILD := 1
   endif
 endif
 
@@ -275,14 +224,8 @@ endif
 VERSION_ASFLAGS := --defsym AVOID_UB=1
 COMPARE := 0
 
-ifeq ($(TARGET_PORT_CONSOLE),1)
-  VERSION_CFLAGS := $(VERSION_CFLAGS) -DTARGET_PORT_CONSOLE
-endif
-
 ifeq ($(TARGET_WEB),1)
   VERSION_CFLAGS := $(VERSION_CFLAGS) -DTARGET_WEB -DUSE_GLES
-else ifeq ($(TARGET_WII_U),1)
-  VERSION_CFLAGS := $(VERSION_CFLAGS) -DTARGET_WII_U
 endif
 
 # Check backends
@@ -340,8 +283,6 @@ BUILD_DIR_BASE := build
 
 ifeq ($(TARGET_WEB),1)
   BUILD_DIR := $(BUILD_DIR_BASE)/$(VERSION)_web
-else ifeq ($(TARGET_WII_U),1)
-  BUILD_DIR := $(BUILD_DIR_BASE)/$(VERSION)_wiiu
 else
   BUILD_DIR := $(BUILD_DIR_BASE)/$(VERSION)_pc
 endif
@@ -349,10 +290,8 @@ endif
 LIBULTRA := $(BUILD_DIR)/libultra.a
 
 ifeq ($(TARGET_WEB),1)
-  EXE := $(BUILD_DIR)/$(TARGET).html
-else ifeq ($(TARGET_WII_U),1)
-  EXE := $(BUILD_DIR)/$(TARGET).rpx
-else
+EXE := $(BUILD_DIR)/$(TARGET).html
+	else
 	ifeq ($(WINDOWS_BUILD),1)
 		EXE := $(BUILD_DIR)/$(TARGET).exe
 
@@ -384,10 +323,8 @@ ASM_DIRS :=
 #  SRC_DIRS += src/pc/discord
 #endif
 
-ifeq ($(TARGET_PORT_CONSOLE),0)
-  ifeq ($(DISCORD_SDK),1)
-    SRC_DIRS += src/pc/network/discord
-  endif
+ifeq ($(DISCORD_SDK),1)
+  SRC_DIRS += src/pc/network/discord
 endif
 
 BIN_DIRS := bin bin/$(VERSION)
@@ -519,20 +456,18 @@ RPC_LIBS :=
 #endif
 
 DISCORD_SDK_LIBS :=
-ifeq ($(TARGET_PORT_CONSOLE),0)
-  ifeq ($(DISCORD_SDK), 1)
-    ifeq ($(WINDOWS_BUILD),1)
-      ifeq ($(TARGET_BITS), 32)
-        DISCORD_SDK_LIBS := lib/discordsdk/x86/discord_game_sdk.dll
-      else
-        DISCORD_SDK_LIBS := lib/discordsdk/discord_game_sdk.dll
-      endif
-    else ifeq ($(OSX_BUILD),1)
-      # needs testing
-      DISCORD_SDK_LIBS := lib/discordsdk/discord_game_sdk.dylib
+ifeq ($(DISCORD_SDK), 1)
+  ifeq ($(WINDOWS_BUILD),1)
+    ifeq ($(TARGET_BITS), 32)
+      DISCORD_SDK_LIBS := lib/discordsdk/x86/discord_game_sdk.dll
     else
-      DISCORD_SDK_LIBS := lib/discordsdk/libdiscord_game_sdk.so
+      DISCORD_SDK_LIBS := lib/discordsdk/discord_game_sdk.dll
     endif
+  else ifeq ($(OSX_BUILD),1)
+    # needs testing
+    DISCORD_SDK_LIBS := lib/discordsdk/discord_game_sdk.dylib
+  else
+    DISCORD_SDK_LIBS := lib/discordsdk/libdiscord_game_sdk.so
   endif
 endif
 
@@ -565,8 +500,6 @@ endif
 #ifeq ($(DISCORDRPC),1)
 ifeq ($(DISCORD_SDK),1)
   LD := $(CXX)
-else ifeq ($(TARGET_WII_U),1)
-  LD := $(CXX)
 else ifeq ($(WINDOWS_BUILD),1)
   ifeq ($(CROSS),i686-w64-mingw32.static-) # fixes compilation in MXE on Linux and WSL
     LD := $(CC)
@@ -585,9 +518,6 @@ else ifeq ($(OSX_BUILD),1)
   CPP := cpp-9 -P
   OBJDUMP := i686-w64-mingw32-objdump
   OBJCOPY := i686-w64-mingw32-objcopy
-else ifeq ($(TARGET_WII_U),1)
-  CPP := powerpc-eabi-cpp
-  OBJDUMP := powerpc-eabi-objdump
 else # Linux & other builds
   CPP := $(CROSS)cpp -P
   OBJCOPY := $(CROSS)objcopy
@@ -625,12 +555,6 @@ else ifeq ($(findstring SDL,$(WINDOW_API)),SDL)
   else
     BACKEND_LDFLAGS += -lGL
   endif
-else ifeq ($(WINDOW_API),GX2)
-  BACKEND_LDFLAGS += -lSDL2 -lwut
-endif
-
-ifeq ($(TARGET_PORT_CONSOLE),1)
-  BACKEND_LDFLAGS += -rdynamic
 endif
 
 ifneq (,$(findstring SDL2,$(AUDIO_API)$(WINDOW_API)$(CONTROLLER_API)))
@@ -655,18 +579,12 @@ else ifeq ($(SDL1_USED),1)
   BACKEND_CFLAGS += -DHAVE_SDL1=1
 endif
 
-ifeq ($(TARGET_WII_U),1)
-  SDLCONFIG :=
-endif
-
-ifeq ($(TARGET_WII_U),0)
-  ifneq ($(SDL1_USED)$(SDL2_USED),00)
-    BACKEND_CFLAGS += `$(SDLCONFIG) --cflags`
-    ifeq ($(WINDOWS_BUILD),1)
-      BACKEND_LDFLAGS += `$(SDLCONFIG) --static-libs` -lsetupapi -luser32 -limm32 -lole32 -loleaut32 -lshell32 -lwinmm -lversion
-    else
-      BACKEND_LDFLAGS += `$(SDLCONFIG) --libs`
-    endif
+ifneq ($(SDL1_USED)$(SDL2_USED),00)
+  BACKEND_CFLAGS += `$(SDLCONFIG) --cflags`
+  ifeq ($(WINDOWS_BUILD),1)
+    BACKEND_LDFLAGS += `$(SDLCONFIG) --static-libs` -lsetupapi -luser32 -limm32 -lole32 -loleaut32 -lshell32 -lwinmm -lversion
+  else
+    BACKEND_LDFLAGS += `$(SDLCONFIG) --libs`
   endif
 endif
 
@@ -681,10 +599,7 @@ else ifeq ($(TARGET_WEB),1)
 else
   CC_CHECK := $(CC) -fsyntax-only -fsigned-char $(BACKEND_CFLAGS) $(INCLUDE_CFLAGS) -Wall -Wextra -Wno-format-security $(VERSION_CFLAGS) $(GRUCODE_CFLAGS)
   CFLAGS := $(OPT_FLAGS) $(INCLUDE_CFLAGS) $(BACKEND_CFLAGS) $(VERSION_CFLAGS) $(GRUCODE_CFLAGS) -fno-strict-aliasing -fwrapv
-endif
 
-ifeq ($(TARGET_WII_U),1)
-  CFLAGS += -ffunction-sections $(MACHDEP) -ffast-math -D__WIIU__ -D__WUT__ $(INCLUDE)
 endif
 
 # Identify that this is a coop build so that one patch can be applied to EX
@@ -743,11 +658,9 @@ endif
 #endif
 
 # Check for Discord SDK option
-ifeq (&(TARGET_PORT_CONSOLE),0)
-  ifeq ($(DISCORD_SDK),1)
-    CC_CHECK += -DDISCORD_SDK
-    CFLAGS += -DDISCORD_SDK
-  endif
+ifeq ($(DISCORD_SDK),1)
+  CC_CHECK += -DDISCORD_SDK
+  CFLAGS += -DDISCORD_SDK
 endif
 
 # Check for development option
@@ -799,9 +712,6 @@ ASFLAGS := -I include -I $(BUILD_DIR) $(VERSION_ASFLAGS)
 
 ifeq ($(TARGET_WEB),1)
 LDFLAGS := -lm -lGL -lSDL2 -no-pie -s TOTAL_MEMORY=20MB -g4 --source-map-base http://localhost:8080/ -s "EXTRA_EXPORTED_RUNTIME_METHODS=['callMain']"
-
-else ifeq ($(TARGET_WII_U),1)
-  LDFLAGS := -lm $(NO_PIE_DEF) $(BACKEND_LDFLAGS) $(MACHDEP) $(RPXSPECS) $(LIBPATHS)
 
 else ifeq ($(WINDOWS_BUILD),1)
   LDFLAGS := $(BITS) -march=$(TARGET_ARCH) -Llib -lpthread $(BACKEND_LDFLAGS) -static

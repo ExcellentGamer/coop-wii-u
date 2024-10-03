@@ -19,7 +19,6 @@
 #include "gfx/gfx_opengl.h"
 #include "gfx/gfx_direct3d11.h"
 #include "gfx/gfx_direct3d12.h"
-#include "gfx/gfx_gx2.h"
 
 #include "gfx/gfx_dxgi.h"
 #include "gfx/gfx_sdl.h"
@@ -210,10 +209,6 @@ void main_func(void) {
 
     configfile_load(configfile_name());
 
-    #ifdef TARGET_WII_U
-    configfile_save(configfile_name()); // Mount SD write now
-    #endif
-
     if (gCLIOpts.FullScreen == 1)
         configWindow.fullscreen = true;
     else if (gCLIOpts.FullScreen == 2)
@@ -229,8 +224,6 @@ void main_func(void) {
     wm_api = &gfx_sdl;
     #elif defined(WAPI_DXGI)
     wm_api = &gfx_dxgi;
-    #elif defined(WAPI_GX2)
-    wm_api = &gfx_gx2_window;
     #else
     #error No window API!
     #endif
@@ -248,9 +241,6 @@ void main_func(void) {
     # else
     #  define RAPI_NAME "OpenGL"
     # endif
-    #elif defined(RAPI_GX2)
-    rendering_api = &gfx_gx2_api;
-    # define RAPI_NAME "GX2"
     #else
     #error No rendering API!
     #endif
