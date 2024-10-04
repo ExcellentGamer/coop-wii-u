@@ -9,6 +9,22 @@ struct DjuiBase* sHovered = NULL;
 struct DjuiBase* sMouseDown = NULL;
 #endif
 
+static bool djui_interactable_mouse_inside(struct DjuiBase* base) {
+    struct DjuiBaseRect* clip = &base->elem;
+    if (mouse_window_x < clip->x)                { return false; }
+    if (mouse_window_x > clip->x + clip->width)  { return false; }
+    if (mouse_window_y < clip->y)                { return false; }
+    if (mouse_window_y > clip->y + clip->height) { return false; }
+    return true;
+}
+
+static void djui_interactable_on_click(struct DjuiBase* base) {
+    if (base                         == NULL) { return; }
+    if (base->interactable           == NULL) { return; }
+    if (base->interactable->on_click == NULL) { return; }
+    base->interactable->on_click(base);
+}
+
 static void djui_interactable_on_hover_begin(struct DjuiBase* base) {
     if (base                               == NULL) { return; }
     if (base->interactable                 == NULL) { return; }
@@ -42,19 +58,27 @@ static void djui_interactable_on_mouse_down_end(struct DjuiBase* base) {
     if (base->interactable                    == NULL) { return; }
     if (base->interactable->on_mouse_down_end == NULL) { return; }
     base->interactable->on_mouse_down_end(base);
+
+    if (djui_interactable_mouse_inside(base)) {
+        djui_interactable_on_click(base);
+    }
 }
 
 static void djui_interactable_mouse_update_active(struct DjuiBase* base) {
     if (!base->visible) { return; }
+    if (!base->enabled) { return; }
 
-    struct DjuiBaseRect* clip = &base->clip;
-    if (mouse_window_x < clip->x) { return; }
-    if (mouse_window_x > clip->x + clip->width) { return; }
-    if (mouse_window_y < clip->y) { return; }
-    if (mouse_window_y > clip->y + clip->height) { return; }
+    static struct DjuiBase* insideParent = NULL;
 
 #ifndef TARGET_WII_U
-    if (base->interactable != NULL) { sHovered = base; }
+    if (!djui_interactable_mouse_inside(base)) { return; }
+
+    if (base->interactable != NULL) {
+        sHovered = base;
+        insideParent = base;
+    } else if (insideParent == NULL) {
+        sHovered = NULL;
+    }
 #endif
 
     // check all children
@@ -62,6 +86,10 @@ static void djui_interactable_mouse_update_active(struct DjuiBase* base) {
     while (child != NULL) {
         djui_interactable_mouse_update_active(child->base);
         child = child->next;
+    }
+
+    if (insideParent == base) {
+        insideParent = NULL;
     }
 }
 
@@ -104,6 +132,7 @@ void djui_interactable_create(struct DjuiBase* base,
     interactable->on_hover_end        = on_hover_end;
     interactable->on_mouse_down_begin = on_mouse_down_begin;
     interactable->on_mouse_down_end   = on_mouse_down_end;
+    interactable->on_click            = NULL;
 
     base->interactable = interactable;
 }

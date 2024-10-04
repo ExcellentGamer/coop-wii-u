@@ -3,7 +3,14 @@
 
 #include "src/pc/controller/controller_sdl.h"
 #include "src/pc/controller/controller_mouse.h"
-#include "src/goddard/renderer.h"
+
+ALIGNED8 static u8 texture_hand_open[] = {
+#include "textures/intro_raw/hand_open.rgba16.inc.c"
+};
+
+ALIGNED8 static u8 texture_hand_closed[] = {
+#include "textures/intro_raw/hand_closed.rgba16.inc.c"
+};
 
 ALIGNED8 static u8 texture_title[] = {
 #include "textures/segment2/custom_title.rgba16.inc.c"
@@ -23,7 +30,7 @@ static void djui_init(void) {
     gDjuiRoot = djui_root_create();
 
 #ifndef TARGET_WII_U
-    sMouseCursor = djui_image_create(NULL, gd_texture_hand_open, 32, 32, 16);
+    sMouseCursor = djui_image_create(NULL, texture_hand_open, 32, 32, 16);
     djui_base_set_location(&sMouseCursor->base, 0, 0);
     djui_base_set_size(&sMouseCursor->base, 64, 64);
 #endif
@@ -96,9 +103,9 @@ static void djui_mouse_update(void) {
     djui_base_set_location(&sMouseCursor->base, mouse_window_x - 13, mouse_window_y - 13);
 
     if (mouse_window_buttons & 0b0001) {
-        djui_image_set_image(sMouseCursor, gd_texture_hand_closed, 32, 32, 16);
+        djui_image_set_image(sMouseCursor, texture_hand_closed, 32, 32, 16);
     } else {
-        djui_image_set_image(sMouseCursor, gd_texture_hand_open, 32, 32, 16);
+        djui_image_set_image(sMouseCursor, texture_hand_open, 32, 32, 16);
     }
 #endif
 #endif
