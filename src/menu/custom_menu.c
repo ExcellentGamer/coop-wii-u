@@ -18,6 +18,7 @@
 #include "audio_defines.h"
 #include "audio/external.h"
 #include "config.h"
+#include "game/chat.h"
 #include "pc/network/version.h"
 
 #ifdef DISCORD_SDK
@@ -219,6 +220,7 @@ static void connect_menu_on_connection_attempt(void) {
     char* ip = strtok(text, delims);
     if (ip == NULL) { custom_menu_close(); return; }
     strncpy(configJoinIp, ip, MAX_CONFIG_STRING);
+    chat_add_message(configJoinIp, CMT_SYSTEM);
 
     // grab port
     char* port = strtok(NULL, delims);
@@ -230,6 +232,7 @@ static void connect_menu_on_connection_attempt(void) {
     else {
         configJoinPort = DEFAULT_PORT;
     }
+    chat_add_message(port, CMT_SYSTEM);
 
     network_set_system(NS_SOCKET);
     network_init(NT_CLIENT);
@@ -238,7 +241,6 @@ static void connect_menu_on_connection_attempt(void) {
 
 static void connect_menu_on_click(void) {
     sConnectionJoinError[0] = '\0';
-
 #ifndef TARGET_WII_U
     keyboard_start_text_input(TIM_IP, MAX_TEXT_INPUT, custom_menu_close, connect_menu_on_connection_attempt);
 #endif
@@ -247,13 +249,17 @@ static void connect_menu_on_click(void) {
     if (configJoinPort == 0 || configJoinPort > 65535) { configJoinPort = DEFAULT_PORT; }
 
     // only print custom port
-#ifndef TARGET_WII_U // Todo: figure this out on wii u pls
+#ifndef TARGET_WII_U
     if (configJoinPort == DEFAULT_PORT) {
         sprintf(gTextInput, "%s", configJoinIp);
     }
     else {
         sprintf(gTextInput, "%s %d", configJoinIp, configJoinPort);
     }
+#endif
+
+#ifdef TARGET_WII_U
+    connect_menu_on_connection_attempt();
 #endif
 }
 
