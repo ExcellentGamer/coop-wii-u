@@ -20,7 +20,7 @@ void djui_base_set_size(struct DjuiBase* base, f32 width, f32 height) {
     base->height.value = height;
 }
 
-void djui_base_set_size_type(struct DjuiBase* base, f32 widthType, f32 heightType) {
+void djui_base_set_size_type(struct DjuiBase* base, enum DjuiScreenValueType widthType, enum DjuiScreenValueType heightType) {
     base->width.type  = widthType;
     base->height.type = heightType;
 }
@@ -30,6 +30,35 @@ void djui_base_set_color(struct DjuiBase* base, u8 r, u8 g, u8 b, u8 a) {
     base->color.g = g;
     base->color.b = b;
     base->color.a = a;
+}
+
+void djui_base_set_border_width(struct DjuiBase* base, f32 width) {
+    base->borderWidth.value = width;
+}
+
+void djui_base_set_border_width_type(struct DjuiBase* base, enum DjuiScreenValueType widthType) {
+    base->borderWidth.type = widthType;
+}
+
+void djui_base_set_border_color(struct DjuiBase* base, u8 r, u8 g, u8 b, u8 a) {
+    base->borderColor.r = r;
+    base->borderColor.g = g;
+    base->borderColor.b = b;
+    base->borderColor.a = a;
+}
+
+void djui_base_set_padding(struct DjuiBase* base, f32 top, f32 right, f32 bottom, f32 left) {
+    base->padding.top.value    = top;
+    base->padding.right.value  = right;
+    base->padding.bottom.value = bottom;
+    base->padding.left.value   = left;
+}
+
+void djui_base_set_padding_type(struct DjuiBase* base, enum DjuiScreenValueType topType, enum DjuiScreenValueType rightType, enum DjuiScreenValueType bottomType, enum DjuiScreenValueType leftType) {
+    base->padding.top.type    = topType;
+    base->padding.right.type  = rightType;
+    base->padding.bottom.type = bottomType;
+    base->padding.left.type   = leftType;
 }
 
 void djui_base_set_alignment(struct DjuiBase* base, enum DjuiHAlign hAlign, enum DjuiVAlign vAlign) {
@@ -61,6 +90,21 @@ static void djui_base_clip(struct DjuiBase* base) {
 
     clip->width  = fmin(clip->width,  (parent->clip.x + parent->clip.width)  - clip->x);
     clip->height = fmin(clip->height, (parent->clip.y + parent->clip.height) - clip->y);
+}
+
+static void djui_base_add_padding(struct DjuiBase* base) {
+    struct DjuiBaseRect* comp = &base->comp;
+    struct DjuiBaseRect* parentComp = &base->comp;
+
+    f32 tPad = (base->padding.top.type == DJUI_SVT_RELATIVE)    ? parentComp->height * base->padding.top.value    : base->padding.top.value;
+    f32 rPad = (base->padding.right.type == DJUI_SVT_RELATIVE)  ? parentComp->width  * base->padding.right.value  : base->padding.right.value;
+    f32 bPad = (base->padding.bottom.type == DJUI_SVT_RELATIVE) ? parentComp->height * base->padding.bottom.value : base->padding.bottom.value;
+    f32 lPad = (base->padding.left.type == DJUI_SVT_RELATIVE)   ? parentComp->width  * base->padding.left.value   : base->padding.left.value;
+
+    comp->x += lPad;
+    comp->y += tPad;
+    comp->height -= tPad + bPad;
+    comp->width  -= lPad + rPad;
 }
 
 void djui_base_compute(struct DjuiBase* base) {
@@ -99,6 +143,7 @@ void djui_base_compute(struct DjuiBase* base) {
     comp->width  = width;
     comp->height = height;
 
+    //djui_base_add_padding(base);
     djui_base_clip(base);
 }
 
@@ -128,6 +173,75 @@ static void djui_base_add_child(struct DjuiBase* parent, struct DjuiBase* base) 
 }
 
   ////////////
+ // render //
+////////////
+
+static f32 djui_base_render_border_piece(struct DjuiBase* base, f32 x1, f32 y1, f32 x2, f32 y2, bool isXBorder) {
+    struct DjuiBaseRect* clip = &base->clip;
+
+    x1 = fmax(x1, clip->x);
+    y1 = fmax(y1, clip->y);
+    x2 = fmin(x2, clip->x + clip->width);
+    y2 = fmin(y2, clip->y + clip->height);
+
+    if (x2 <= x1) { return 0; }
+    if (y2 <= y1) { return 0; }
+
+    // translate position
+    f32 translatedX = x1;
+    f32 translatedY = y1;
+    djui_gfx_position_translate(&translatedX, &translatedY);
+    create_dl_translation_matrix(DJUI_MTX_PUSH, translatedX, translatedY, 0);
+
+    // translate size
+    f32 translatedWidth = x2 - x1;
+    f32 translatedHeight = y2 - y1;
+    djui_gfx_scale_translate(&translatedWidth, &translatedHeight);
+    create_dl_scale_matrix(DJUI_MTX_NOPUSH, translatedWidth, translatedHeight, 1.0f);
+
+    // render
+    gDPSetEnvColor(gDisplayListHead++, base->borderColor.r, base->borderColor.g, base->borderColor.b, base->borderColor.a);
+    gSPDisplayList(gDisplayListHead++, dl_djui_simple_rect);
+
+    gSPPopMatrix(gDisplayListHead++, G_MTX_MODELVIEW);
+
+    return isXBorder ? fmax(x2 - x1, 0) : fmax(y2 - y1, 0);
+}
+
+static void djui_base_render_border(struct DjuiBase* base) {
+    struct DjuiBaseRect* comp = &base->comp;
+    struct DjuiBaseRect* clip = &base->clip;
+    struct DjuiBaseRect savedComp = base->comp;
+
+    f32 xBorderWidth = (base->borderWidth.type == DJUI_SVT_RELATIVE) ? (savedComp.width  * base->borderWidth.value) : base->borderWidth.value;
+    f32 yBorderWidth = (base->borderWidth.type == DJUI_SVT_RELATIVE) ? (savedComp.height * base->borderWidth.value) : base->borderWidth.value;
+
+    xBorderWidth = fmin(xBorderWidth, savedComp.width  / 2.0f);
+    yBorderWidth = fmin(yBorderWidth, savedComp.height / 2.0f);
+
+    comp->x      += base->borderWidth.value;
+    comp->y      += base->borderWidth.value;
+    comp->width  -= base->borderWidth.value * 2.0f;
+    comp->height -= base->borderWidth.value * 2.0f;
+
+    f32 addClip = 0;
+
+    addClip = djui_base_render_border_piece(base, savedComp.x, savedComp.y, savedComp.x + savedComp.width, savedComp.y + yBorderWidth, false);
+    clip->y      += addClip;
+    clip->height -= addClip;
+
+    addClip = djui_base_render_border_piece(base, savedComp.x, savedComp.y + savedComp.height - yBorderWidth, savedComp.x + savedComp.width, savedComp.y + savedComp.height, false);
+    clip->height -= addClip;
+
+    addClip = djui_base_render_border_piece(base, savedComp.x, savedComp.y, savedComp.x + xBorderWidth, savedComp.y + savedComp.height, true);
+    clip->x     += addClip;
+    clip->width -= addClip;
+
+    addClip = djui_base_render_border_piece(base, savedComp.x + savedComp.width - xBorderWidth, savedComp.y, savedComp.x + savedComp.width, savedComp.y + savedComp.height, true);
+    clip->width -= addClip;
+}
+
+  ////////////
  // events //
 ////////////
 
@@ -135,13 +249,25 @@ void djui_base_render(struct DjuiBase* base) {
     if (!base->visible) { return; }
 
     struct DjuiBaseRect* comp = &base->comp;
+    struct DjuiBaseRect* clip = &base->clip;
+
     djui_base_compute(base);
     if (comp->width  <= 0) { return; }
     if (comp->height <= 0) { return; }
+    if (clip->width  <= 0) { return; }
+    if (clip->height <= 0) { return; }
+
+    if (base->borderWidth.value > 0 && base->borderColor.a > 0) {
+        djui_base_render_border(base);
+    }
+
+    if (clip->width < 0 || clip->height <= 0) { return; }
 
     if (base->render != NULL) {
         base->render(base);
     }
+
+    djui_base_add_padding(base);
 
     // render all children
     struct DjuiBaseChild* child = base->child;

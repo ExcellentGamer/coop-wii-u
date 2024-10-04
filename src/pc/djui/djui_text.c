@@ -22,6 +22,13 @@ void djui_text_set_font_size(struct DjuiText* text, f32 fontSize) {
     text->fontSize = fontSize;
 }
 
+void djui_text_set_drop_shadow(struct DjuiText* text, f32 r, f32 g, f32 b, f32 a) {
+    text->dropShadow.r = r;
+    text->dropShadow.g = g;
+    text->dropShadow.b = b;
+    text->dropShadow.a = a;
+}
+
 void djui_text_set_alignment(struct DjuiText* text, enum DjuiHAlign hAlign, enum DjuiVAlign vAlign) {
     text->textHAlign = hAlign;
     text->textVAlign = vAlign;
@@ -44,7 +51,7 @@ static void djui_text_translate(f32 x, f32 y) {
     sTextRenderY += y;
 }
 
-static void djui_text_render_char(struct DjuiText* text, u8 d) {
+static void djui_text_render_single_char(struct DjuiText* text, u8 d) {
     struct DjuiBaseRect* comp = &text->base.comp;
 
     f32 dX = comp->x + sTextRenderX * text->fontSize;
@@ -61,6 +68,21 @@ static void djui_text_render_char(struct DjuiText* text, u8 d) {
 
     sTextRenderLastX = sTextRenderX;
     sTextRenderLastY = sTextRenderY;
+}
+
+static void djui_text_render_char(struct DjuiText* text, u8 d) {
+    if (text->dropShadow.a > 0) {
+        // render drop shadow
+        struct DjuiBase* base = &text->base;
+        sTextRenderX += 0.5f;
+        sTextRenderY += 0.5f;
+        gDPSetEnvColor(gDisplayListHead++, text->dropShadow.r, text->dropShadow.g, text->dropShadow.b, text->dropShadow.a);
+        djui_text_render_single_char(text, d);
+        gDPSetEnvColor(gDisplayListHead++, base->color.r, base->color.g, base->color.b, base->color.a);
+        sTextRenderX -= 0.5f;
+        sTextRenderY -= 0.5f;
+    }
+    djui_text_render_single_char(text, d);
 }
 
 static f32 djui_text_measure_word_width(char* message) {
@@ -189,9 +211,6 @@ static void djui_text_render(struct DjuiBase* base) {
     sTextRenderY = 0;
     sTextRenderLastX = 0;
     sTextRenderLastY = 0;
-
-    // compute base
-    djui_base_compute(base);
 
     // translate position
     f32 translatedX = comp->x;
