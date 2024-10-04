@@ -220,7 +220,9 @@ static void connect_menu_on_connection_attempt(void) {
     char* ip = strtok(text, delims);
     if (ip == NULL) { custom_menu_close(); return; }
     strncpy(configJoinIp, ip, MAX_CONFIG_STRING);
-    chat_add_message(configJoinIp, CMT_SYSTEM);
+#ifdef TARGET_WII_U
+    chat_add_message("ip grabbed", CMT_SYSTEM);
+#endif
 
     // grab port
     char* port = strtok(NULL, delims);
@@ -232,7 +234,9 @@ static void connect_menu_on_connection_attempt(void) {
     else {
         configJoinPort = DEFAULT_PORT;
     }
-    chat_add_message(port, CMT_SYSTEM);
+#ifdef TARGET_WII_U
+    chat_add_message("port grabbed", CMT_SYSTEM);
+#endif
 
     network_set_system(NS_SOCKET);
     network_init(NT_CLIENT);
