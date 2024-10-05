@@ -20,6 +20,7 @@
 #include "engine/math_util.h"
 #include "menu/file_select.h"
 #include "game/chat.h"
+#include "src/pc/djui/djui.h"
 
 // TODO: use some common lookup header
 #define SCANCODE_BACKSPACE 0x0E
@@ -88,6 +89,8 @@ bool keyboard_on_key_down(int scancode) {
     // alter the held value of modifier keys
     keyboard_alter_modifier(scancode, true);
 
+    djui_interactable_on_key_down(scancode);
+
 #ifdef DEBUG
     if (!sInTextInput) {
         debug_keyboard_on_key_down(scancode);
@@ -133,6 +136,8 @@ bool keyboard_on_key_down(int scancode) {
 bool keyboard_on_key_up(int scancode) {
     // alter the held value of modifier keys
     keyboard_alter_modifier(scancode, false);
+
+    djui_interactable_on_key_up(scancode);
 
     if (sInTextInput) {
         // ignore any key up event if we're in text-input mode

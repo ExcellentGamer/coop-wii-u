@@ -8,11 +8,13 @@
 #include "game/ingame_menu.h"
 
 #include "djui_types.h"
+#include "djui_font.h"
 #include "djui_gfx.h"
 #include "djui_base.h"
 #include "djui_interactable.h"
 
 #include "djui_root.h"
+#include "djui_cursor.h"
 #include "djui_rect.h"
 #include "djui_text.h"
 #include "djui_image.h"
@@ -20,7 +22,9 @@
 #include "djui_button.h"
 #include "djui_flow_layout.h"
 
+#include "djui_panel_debug.h"
 #include "djui_panel_main.h"
+#include "djui_panel_options.h"
 #include "djui_panel_quit.h"
 
 extern struct DjuiRoot* gDjuiRoot;

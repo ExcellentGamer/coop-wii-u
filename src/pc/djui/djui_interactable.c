@@ -1,22 +1,30 @@
 #include <string.h>
+#include <time.h>
 #include "djui.h"
 
 #include "src/pc/controller/controller_sdl.h"
 #include "src/pc/controller/controller_mouse.h"
+#include "src/pc/controller/controller_keyboard.h"
 
+#define PAD_BUTTON_A (1 << 15)
+
+#define SCANCODE_UP    328
+#define SCANCODE_DOWN  336
+#define SCANCODE_LEFT  331
+#define SCANCODE_RIGHT 333
+
+#define SCANCODE_ENTER  28
+#define SCANCODE_SPACE  57
+#define SCANCODE_ESCAPE 1
+
+enum PadHoldDirection { PAD_HOLD_DIR_NONE, PAD_HOLD_DIR_UP, PAD_HOLD_DIR_DOWN, PAD_HOLD_DIR_LEFT, PAD_HOLD_DIR_RIGHT };
+static enum PadHoldDirection sKeyboardHoldDirection = PAD_HOLD_DIR_NONE;
+
+static struct DjuiBase* sHovered   = NULL;
 #ifndef TARGET_WII_U
-struct DjuiBase* sHovered = NULL;
-struct DjuiBase* sMouseDown = NULL;
+static struct DjuiBase* sMouseDown = NULL;
 #endif
-
-static bool djui_interactable_mouse_inside(struct DjuiBase* base) {
-    struct DjuiBaseRect* clip = &base->elem;
-    if (mouse_window_x < clip->x)                { return false; }
-    if (mouse_window_x > clip->x + clip->width)  { return false; }
-    if (mouse_window_y < clip->y)                { return false; }
-    if (mouse_window_y > clip->y + clip->height) { return false; }
-    return true;
-}
+static u8 sInputCursorDown         = false;
 
 static void djui_interactable_on_click(struct DjuiBase* base) {
     if (base                         == NULL) { return; }
@@ -39,10 +47,10 @@ void djui_interactable_on_hover_end(struct DjuiBase* base) {
     base->interactable->on_hover_end(base);
 }
 
-static void djui_interactable_on_mouse_down_begin(struct DjuiBase* base) {
+static void djui_interactable_on_cursor_down_begin(struct DjuiBase* base) {
     if (base                                    == NULL) { return; }
     if (base->interactable                      == NULL) { return; }
-    if (base->interactable->on_mouse_down_begin == NULL) { return; }
+    if (base->interactable->on_cursor_down_begin == NULL) { return; }
 
 #ifndef TARGET_WII_U
     if (sHovered != NULL) {
@@ -50,28 +58,27 @@ static void djui_interactable_on_mouse_down_begin(struct DjuiBase* base) {
         sHovered = NULL;
     }
 #endif
-    base->interactable->on_mouse_down_begin(base);
+    base->interactable->on_cursor_down_begin(base);
 }
 
-static void djui_interactable_on_mouse_down_end(struct DjuiBase* base) {
+static void djui_interactable_on_cursor_down_end(struct DjuiBase* base) {
     if (base                                  == NULL) { return; }
     if (base->interactable                    == NULL) { return; }
-    if (base->interactable->on_mouse_down_end == NULL) { return; }
-    base->interactable->on_mouse_down_end(base);
+    if (base->interactable->on_cursor_down_end == NULL) { return; }
+    base->interactable->on_cursor_down_end(base);
 
-    if (djui_interactable_mouse_inside(base)) {
+    if (djui_cursor_inside_base(base)) {
         djui_interactable_on_click(base);
     }
 }
 
-static void djui_interactable_mouse_update_active(struct DjuiBase* base) {
+static void djui_interactable_cursor_update_active(struct DjuiBase* base) {
     if (!base->visible) { return; }
     if (!base->enabled) { return; }
 
     static struct DjuiBase* insideParent = NULL;
 
-#ifndef TARGET_WII_U
-    if (!djui_interactable_mouse_inside(base)) { return; }
+    if (!djui_cursor_inside_base(base)) { return; }
 
     if (base->interactable != NULL) {
         sHovered = base;
@@ -79,12 +86,11 @@ static void djui_interactable_mouse_update_active(struct DjuiBase* base) {
     } else if (insideParent == NULL) {
         sHovered = NULL;
     }
-#endif
 
     // check all children
     struct DjuiBaseChild* child = base->child;
     while (child != NULL) {
-        djui_interactable_mouse_update_active(child->base);
+        djui_interactable_cursor_update_active(child->base);
         child = child->next;
     }
 
@@ -93,35 +99,115 @@ static void djui_interactable_mouse_update_active(struct DjuiBase* base) {
     }
 }
 
+void djui_interactable_on_key_down(int scancode) {
+    switch (scancode) {
+        case SCANCODE_UP:    sKeyboardHoldDirection = PAD_HOLD_DIR_UP;    break;
+        case SCANCODE_DOWN:  sKeyboardHoldDirection = PAD_HOLD_DIR_DOWN;  break;
+        case SCANCODE_LEFT:  sKeyboardHoldDirection = PAD_HOLD_DIR_LEFT;  break;
+        case SCANCODE_RIGHT: sKeyboardHoldDirection = PAD_HOLD_DIR_RIGHT; break;
+        case SCANCODE_ENTER: sInputCursorDown |= (1 << 0);                break;
+    }
+}
+
+void djui_interactable_on_key_up(int scancode) {
+    switch (scancode) {
+        case SCANCODE_UP:    if (sKeyboardHoldDirection == PAD_HOLD_DIR_UP)    { sKeyboardHoldDirection = PAD_HOLD_DIR_NONE; } break;
+        case SCANCODE_DOWN:  if (sKeyboardHoldDirection == PAD_HOLD_DIR_DOWN)  { sKeyboardHoldDirection = PAD_HOLD_DIR_NONE; } break;
+        case SCANCODE_LEFT:  if (sKeyboardHoldDirection == PAD_HOLD_DIR_LEFT)  { sKeyboardHoldDirection = PAD_HOLD_DIR_NONE; } break;
+        case SCANCODE_RIGHT: if (sKeyboardHoldDirection == PAD_HOLD_DIR_RIGHT) { sKeyboardHoldDirection = PAD_HOLD_DIR_NONE; } break;
+        case SCANCODE_ENTER: sInputCursorDown &= ~(1 << 0); break;
+    }
+    if (scancode == SCANCODE_ENTER) {
+        sInputCursorDown &= ~(1 << 0);
+    }
+}
+
+void djui_interactable_update_pad(void) {
+    OSContPad* pad = &gControllerPads[0];
+
+    sInputCursorDown &= ~(1 << 1);
+    if (pad->button & PAD_BUTTON_A) {
+        sInputCursorDown |=  (1 << 1);
+    }
+
+    static enum PadHoldDirection lastPadHoldDirection = PAD_HOLD_DIR_NONE;
+    static clock_t padHoldTimer = 0;
+
+    enum PadHoldDirection padHoldDirection = PAD_HOLD_DIR_NONE;
+    if (pad->stick_x == 0 && pad->stick_y == 0) {
+        padHoldDirection = PAD_HOLD_DIR_NONE;
+    } else if (abs(pad->stick_x) > abs(pad->stick_y)) {
+        padHoldDirection = (pad->stick_x < 0) ? PAD_HOLD_DIR_LEFT : PAD_HOLD_DIR_RIGHT;
+    } else {
+        padHoldDirection = (pad->stick_y > 0) ? PAD_HOLD_DIR_UP : PAD_HOLD_DIR_DOWN;
+    }
+
+    if (sKeyboardHoldDirection != PAD_HOLD_DIR_NONE) {
+        padHoldDirection = sKeyboardHoldDirection;
+    }
+
+    bool validPadHold = false;
+    if (padHoldDirection == PAD_HOLD_DIR_NONE) {
+        // nothing to do
+    } else if (padHoldDirection != lastPadHoldDirection) {
+        padHoldTimer = clock() + CLOCKS_PER_SEC * 0.25f;
+        validPadHold = true;
+    } else if (clock() > padHoldTimer) {
+        padHoldTimer = clock() + CLOCKS_PER_SEC * 0.10f;
+        validPadHold = true;
+    }
+
+    if (validPadHold) {
+        switch (padHoldDirection) {
+            case PAD_HOLD_DIR_UP:    djui_cursor_move( 0, -1); break;
+            case PAD_HOLD_DIR_DOWN:  djui_cursor_move( 0,  1); break;
+            case PAD_HOLD_DIR_LEFT:  djui_cursor_move(-1,  0); break;
+            case PAD_HOLD_DIR_RIGHT: djui_cursor_move( 1,  0); break;
+            default: break;
+        }
+    }
+
+    lastPadHoldDirection = padHoldDirection;
+}
+
 void djui_interactable_update(void) {
+    djui_interactable_update_pad();
+    if ((sInputCursorDown)
 #ifndef TARGET_WII_U
-    if (mouse_window_buttons & 0b0001) {
+    || (mouse_window_buttons & 0b0001)
+#endif
+    ) {
         if (sHovered != NULL) {
+#ifndef TARGET_WII_U
             sMouseDown = sHovered;
+#endif
             sHovered = NULL;
-            djui_interactable_on_mouse_down_begin(sMouseDown);
+#ifndef TARGET_WII_U
+            djui_interactable_on_cursor_down_begin(sMouseDown);
+#endif
         }
     } else {
+#ifndef TARGET_WII_U
         if (sMouseDown != NULL) {
-            djui_interactable_on_mouse_down_end(sMouseDown);
+            djui_interactable_on_cursor_down_end(sMouseDown);
             sMouseDown = NULL;
         }
+#endif
         struct DjuiBase* lastHovered = sHovered;
         sHovered = NULL;
-        djui_interactable_mouse_update_active(&gDjuiRoot->base);
+        djui_interactable_cursor_update_active(&gDjuiRoot->base);
         if (lastHovered != sHovered) {
             djui_interactable_on_hover_end(lastHovered);
         }
         djui_interactable_on_hover_begin(sHovered);
     }
-#endif
 }
 
 void djui_interactable_create(struct DjuiBase* base,
     void (*on_hover_begin)(struct DjuiBase*),
     void (*on_hover_end)(struct DjuiBase*),
-    void (*on_mouse_down_begin)(struct DjuiBase*),
-    void (*on_mouse_down_end)(struct DjuiBase*)) {
+    void (*on_cursor_down_begin)(struct DjuiBase*),
+    void (*on_cursor_down_end)(struct DjuiBase*)) {
 
     if (base->interactable != NULL) {
         free(base->interactable);
@@ -130,8 +216,8 @@ void djui_interactable_create(struct DjuiBase* base,
     struct DjuiInteractable* interactable = malloc(sizeof(struct DjuiInteractable));
     interactable->on_hover_begin      = on_hover_begin;
     interactable->on_hover_end        = on_hover_end;
-    interactable->on_mouse_down_begin = on_mouse_down_begin;
-    interactable->on_mouse_down_end   = on_mouse_down_end;
+    interactable->on_cursor_down_begin = on_cursor_down_begin;
+    interactable->on_cursor_down_end   = on_cursor_down_end;
     interactable->on_click            = NULL;
 
     base->interactable = interactable;
