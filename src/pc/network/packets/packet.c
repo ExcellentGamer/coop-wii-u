@@ -6,15 +6,29 @@ void packet_process(struct Packet* p) {
     if (p->levelAreaMustMatch) {
         extern s16 gCurrCourseNum, gCurrActStarNum, gCurrLevelNum, gCurrAreaIndex;
         bool levelAreaMismatch =
-            (p->courseNum != gCurrCourseNum
-                || p->actNum != gCurrActStarNum
-                || p->levelNum != gCurrLevelNum
-                || p->areaIndex != gCurrAreaIndex);
+            (p->courseNum    != gCurrCourseNum
+             || p->actNum    != gCurrActStarNum
+             || p->levelNum  != gCurrLevelNum
+             || p->areaIndex != gCurrAreaIndex);
         // drop packet
         if (levelAreaMismatch) {
             if (gNetworkType != NT_SERVER) {
                 LOG_INFO("dropping level mismatch packet %d", p->packetType);
                 LOG_INFO("    (%d, %d, %d, %d) != (%d, %d, %d, %d)", p->courseNum, p->actNum, p->levelNum, p->areaIndex, gCurrCourseNum, gCurrActStarNum, gCurrLevelNum, gCurrAreaIndex);
+            }
+            return;
+        }
+    } else if (p->levelMustMatch) {
+        extern s16 gCurrCourseNum, gCurrActStarNum, gCurrLevelNum;
+        bool levelMismatch =
+            (p->courseNum != gCurrCourseNum
+                || p->actNum != gCurrActStarNum
+                || p->levelNum != gCurrLevelNum);
+        // drop packet
+        if (levelMismatch) {
+            if (gNetworkType != NT_SERVER) {
+                LOG_INFO("dropping level mismatch packet %d", p->packetType);
+                LOG_INFO("    (%d, %d, %d) != (%d, %d, %d)", p->courseNum, p->actNum, p->levelNum, gCurrCourseNum, gCurrActStarNum, gCurrLevelNum);
             }
             return;
         }
@@ -31,7 +45,7 @@ void packet_process(struct Packet* p) {
         case PACKET_COLLECT_COIN:            network_receive_collect_coin(p);            break;
         case PACKET_COLLECT_ITEM:            network_receive_collect_item(p);            break;
         case PACKET_UNUSED1:                                                             break;
-        case PACKET_UNUSED2:                                                             break;
+        case PACKET_DEBUG_SYNC:              network_receive_debug_sync(p);              break;
         case PACKET_JOIN_REQUEST:            network_receive_join_request(p);            break;
         case PACKET_JOIN:                    network_receive_join(p);                    break;
         case PACKET_CHAT:                    network_receive_chat(p);                    break;
@@ -75,22 +89,28 @@ void packet_receive(struct Packet* p) {
     network_send_ack(p);
 
     // refuse packets from unknown players other than join request
-    if (gNetworkType == NT_SERVER && p->localIndex == UNKNOWN_LOCAL_INDEX && packetType != PACKET_JOIN_REQUEST) {
-        network_send_kick(EKT_CLOSE_CONNECTION);
+    if (gNetworkType == NT_SERVER && p->localIndex == UNKNOWN_LOCAL_INDEX && packetType != PACKET_JOIN_REQUEST && packetType != PACKET_ACK) {
+        if (packetType != PACKET_PLAYER) {
+            LOG_INFO("closing connection for packetType: %d", packetType);
+            network_send_kick(EKT_CLOSE_CONNECTION);
+        }
+        LOG_INFO("refusing packet from unknown player, packetType: %d", packetType);
         return;
     }
 
     // check if we've already seen this packet
     if (p->localIndex != 0 && p->seqId != 0 && gNetworkPlayers[p->localIndex].connected) {
+        u32 packetHash = packet_hash(p);
         struct NetworkPlayer* np = &gNetworkPlayers[p->localIndex];
         for (int i = 0; i < MAX_RX_SEQ_IDS; i++) {
-            if (np->rxSeqIds[i] == p->seqId) {
+            if (np->rxSeqIds[i] == p->seqId && np->rxPacketHash[i] == packetHash) {
                 LOG_INFO("received duplicate packet");
                 return;
             }
         }
         // remember seq id
         np->rxSeqIds[np->onRxSeqId] = p->seqId;
+        np->rxPacketHash[np->onRxSeqId] = packetHash;
         np->onRxSeqId++;
         if (np->onRxSeqId >= MAX_RX_SEQ_IDS) { np->onRxSeqId = 0; }
     }
@@ -109,6 +129,8 @@ void packet_receive(struct Packet* p) {
             // process the packet
             packet_process(p);
         }
+    } else {
+        LOG_INFO("packet initial read failed, packetType: %d", packetType);
     }
 
     // broadcast packet

@@ -7,39 +7,65 @@
 #include "src/game/interaction.h"
 #include "src/engine/math_util.h"
 #include "src/game/save_file.h"
-#include "src/menu/custom_menu.h"
+#include "src/game/level_update.h"
 #include "src/pc/fs/fs.h"
 #include "PR/os_eeprom.h"
 #include "pc/network/version.h"
-#define DISABLE_MODULE_LOG 1
+#include "pc/djui/djui.h"
+#include "pc/cheats.h"
+#include "pc/utils/string_builder.h"
+//#define DISABLE_MODULE_LOG 1
 #include "pc/debuglog.h"
-
+#include "pc/utils/misc.h"
 
 extern u8* gOverrideEeprom;
 static u8 eeprom[512] = { 0 };
 
+static u8   sJoinRequestPlayerModel;
+static u8   sJoinRequestPlayerPalette;
+static char sJoinRequestPlayerName[MAX_PLAYER_STRING];
+
 void network_send_join_request(void) {
-    assert(gNetworkType == NT_CLIENT);
+    SOFT_ASSERT(gNetworkType == NT_CLIENT);
 
     gOverrideEeprom = eeprom;
 
     struct Packet p;
-    packet_init(&p, PACKET_JOIN_REQUEST, true, false);
-    network_send_to(0, &p);
+    packet_init(&p, PACKET_JOIN_REQUEST, true, PLMT_NONE);
+
+    packet_write(&p, &configPlayerModel,   sizeof(u8));
+    packet_write(&p, &configPlayerPalette, sizeof(u8));
+    packet_write(&p, &configPlayerName,    sizeof(u8) * MAX_PLAYER_STRING);
+
+    network_send_to((gNetworkPlayerServer != NULL) ? gNetworkPlayerServer->localIndex : 0, &p);
     LOG_INFO("sending join request");
 }
 
 void network_receive_join_request(struct Packet* p) {
-    assert(gNetworkType == NT_SERVER);
+    SOFT_ASSERT(gNetworkType == NT_SERVER);
     LOG_INFO("received join request");
+
+    if (p->dataLength > 5) {
+        packet_read(p, &sJoinRequestPlayerModel,   sizeof(u8));
+        packet_read(p, &sJoinRequestPlayerPalette, sizeof(u8));
+        packet_read(p, &sJoinRequestPlayerName,    sizeof(u8) * MAX_PLAYER_STRING);
+    } else {
+        sJoinRequestPlayerModel = 0;
+        sJoinRequestPlayerPalette = 0;
+        snprintf(sJoinRequestPlayerName, MAX_PLAYER_STRING, "%s", "Player");
+    }
+
     network_send_join(p);
 }
 
 void network_send_join(struct Packet* joinRequestPacket) {
-    assert(gNetworkType == NT_SERVER);
+    SOFT_ASSERT(gNetworkType == NT_SERVER);
+
+    // make palette unique
+    sJoinRequestPlayerPalette = network_player_unique_palette(sJoinRequestPlayerPalette);
 
     // do connection event
-    joinRequestPacket->localIndex = network_player_connected(NPT_CLIENT, joinRequestPacket->localIndex);
+    joinRequestPacket->localIndex = network_player_connected(NPT_CLIENT, joinRequestPacket->localIndex, sJoinRequestPlayerModel, sJoinRequestPlayerPalette, sJoinRequestPlayerName);
     if (joinRequestPacket->localIndex == UNKNOWN_LOCAL_INDEX) {
         network_send_kick(EKT_FULL_PARTY);
         return;
@@ -56,7 +82,7 @@ void network_send_join(struct Packet* joinRequestPacket) {
     LOG_INFO("sending version: %s", version);
 
     struct Packet p;
-    packet_init(&p, PACKET_JOIN, true, false);
+    packet_init(&p, PACKET_JOIN, true, PLMT_NONE);
     packet_write(&p, &version, sizeof(u8) * MAX_VERSION_LENGTH);
     packet_write(&p, &joinRequestPacket->localIndex, sizeof(u8));
     packet_write(&p, &gCurrSaveFileNum, sizeof(s16));
@@ -65,6 +91,7 @@ void network_send_join(struct Packet* joinRequestPacket) {
     packet_write(&p, &gServerSettings.stayInLevelAfterStar, sizeof(u8));
     packet_write(&p, &gServerSettings.skipIntro, sizeof(u8));
     packet_write(&p, &gServerSettings.shareLives, sizeof(u8));
+    packet_write(&p, &gServerSettings.enableCheats, sizeof(u8));
     packet_write(&p, eeprom, sizeof(u8) * 512);
 
     u8 modCount = string_linked_list_count(&gRegisteredMods);
@@ -87,7 +114,8 @@ void network_send_join(struct Packet* joinRequestPacket) {
 }
 
 void network_receive_join(struct Packet* p) {
-    assert(gNetworkType == NT_CLIENT);
+    SOFT_ASSERT(gNetworkType == NT_CLIENT);
+    if (gNetworkPlayerLocal != NULL) { return; }
     LOG_INFO("received join packet");
 
     gOverrideEeprom = eeprom;
@@ -109,17 +137,11 @@ void network_receive_join(struct Packet* p) {
     packet_read(p, &remoteVersion, sizeof(u8) * MAX_VERSION_LENGTH);
     LOG_INFO("server has version: %s", version);
     if (memcmp(version, remoteVersion, MAX_VERSION_LENGTH) != 0) {
+        network_shutdown(true);
         LOG_ERROR("version mismatch");
-
-        // todo: hack: remove me in the future
-        // needed because the old style only had 8 characters for the version
-        if (strcmp("beta", remoteVersion) != 0) {
-            remoteVersion[8] = '\0';
-        }
-
-        char mismatchMessage[128] = { 0 };
-        snprintf(mismatchMessage, 128, "Version mismatch.\n\nYour version - %s\nTheir version - %s\n\nSomeone is out of date!\n", version, remoteVersion);
-        custom_menu_connection_error(mismatchMessage);
+        char mismatchMessage[256] = { 0 };
+        snprintf(mismatchMessage, 256, "\\#ffa0a0\\Error:\\#c8c8c8\\ Version mismatch.\n\nYour version: \\#a0a0ff\\%s\\#c8c8c8\\\nTheir version: \\#a0a0ff\\%s\\#c8c8c8\\\n\nSomeone is out of date!\n", version, remoteVersion);
+        djui_panel_join_message_error(mismatchMessage);
         return;
     }
 
@@ -130,8 +152,11 @@ void network_receive_join(struct Packet* p) {
     packet_read(p, &gServerSettings.stayInLevelAfterStar, sizeof(u8));
     packet_read(p, &gServerSettings.skipIntro, sizeof(u8));
     packet_read(p, &gServerSettings.shareLives, sizeof(u8));
+    packet_read(p, &gServerSettings.enableCheats, sizeof(u8));
     packet_read(p, eeprom, sizeof(u8) * 512);
     packet_read(p, &modCount, sizeof(u8));
+
+    Cheats.EnableCheats = gServerSettings.enableCheats;
 
     struct StringLinkedList head = { 0 };
     for (int i = 0; i < modCount; i++) {
@@ -143,15 +168,50 @@ void network_receive_join(struct Packet* p) {
     }
 
     if (string_linked_list_mismatch(&gRegisteredMods, &head)) {
+        network_shutdown(true);
+
+        struct StringBuilder* builder = string_builder_create(512);
+        string_builder_append(builder, "\\#ffa0a0\\Error:\\#c8c8c8\\ mods don't match.\n\n");
+
+        string_builder_append(builder, "\\#c8c8c8\\Yours: ");
+        struct StringLinkedList* node = &gRegisteredMods;
+        bool first = true;
+        while (node != NULL && node->string != NULL) {
+            string_builder_append(builder, first ? "\\#%s\\%s" : ", \\#%s\\%s",
+                string_linked_list_contains(&head, node->string) ? "a0ffa0" : "ffa0a0"
+                , node->string);
+            first = false;
+            node = node->next;
+        }
+
+        string_builder_append(builder, "\n\n\\#c8c8c8\\Theirs: ");
+        node = &head;
+        first = true;
+        while (node != NULL && node->string != NULL) {
+            string_builder_append(builder, first ? "\\#%s\\%s" : ", \\#%s\\%s",
+                string_linked_list_contains(&gRegisteredMods, node->string) ? "a0ffa0" : "ffa0a0"
+                , node->string);
+            first = false;
+            node = node->next;
+        }
+
+        djui_panel_join_message_error(builder->string);
+        string_builder_destroy(builder);
         string_linked_list_free(&head);
-        custom_menu_connection_error("Your mods don't match!");
         return;
     }
     string_linked_list_free(&head);
 
-    network_player_connected(NPT_SERVER, 0);
-    network_player_connected(NPT_LOCAL, myGlobalIndex);
+    network_player_connected(NPT_SERVER, 0, 0, 0, "Player");
+    network_player_connected(NPT_LOCAL, myGlobalIndex, configPlayerModel, configPlayerPalette, configPlayerName);
+    djui_chat_box_create();
 
     save_file_load_all(TRUE);
-    custom_menu_goto_game(gCurrSaveFileNum);
+
+    djui_panel_shutdown();
+    update_all_mario_stars();
+
+    fake_lvl_init_from_save_file();
+    extern s16 gChangeLevel;
+    gChangeLevel = 16;
 }

@@ -1,5 +1,37 @@
 #include "djui.h"
 
+struct DjuiBase* djui_three_panel_get_header(struct DjuiThreePanel* threePanel) {
+    struct DjuiBase* children[3] = { NULL };
+    struct DjuiBaseChild* child = threePanel->base.child;
+    for (int i = 0; i < 3; i++) {
+        if (child == NULL || child->base == NULL) { break; }
+        children[i] = child->base;
+        child = child->next;
+    }
+    return children[0];
+}
+
+struct DjuiBase* djui_three_panel_get_body(struct DjuiThreePanel* threePanel) {
+    struct DjuiBase* children[3] = { NULL };
+    struct DjuiBaseChild* child = threePanel->base.child;
+    for (int i = 0; i < 3; i++) {
+        if (child == NULL || child->base == NULL) { break; }
+        children[i] = child->base;
+        child = child->next;
+    }
+    return children[1];
+}
+
+struct DjuiBase* djui_three_panel_get_footer(struct DjuiThreePanel* threePanel) {
+    struct DjuiBase* children[3] = { NULL };
+    struct DjuiBaseChild* child = threePanel->base.child;
+    for (int i = 0; i < 3; i++) {
+        if (child == NULL || child->base == NULL) { break; }
+        children[i] = child->base;
+        child = child->next;
+    }
+    return children[2];
+}
 
 void djui_three_panel_set_min_header_size_type(struct DjuiThreePanel* threePanel, enum DjuiScreenValueType minHeaderSizeType) {
     threePanel->minHeaderSize.type = minHeaderSizeType;
@@ -29,7 +61,7 @@ void djui_three_panel_set_min_footer_size(struct DjuiThreePanel* threePanel, f32
  // events //
 ////////////
 
-void djui_three_panel_render(struct DjuiBase* base) {
+bool djui_three_panel_render(struct DjuiBase* base) {
     struct DjuiThreePanel* threePanel = (struct DjuiThreePanel*)base;
 
     struct DjuiBase* children[3] = { NULL };
@@ -44,7 +76,7 @@ void djui_three_panel_render(struct DjuiBase* base) {
     struct DjuiBase* body = children[1];
     struct DjuiBase* foot = children[2];
 
-    if (body == NULL) { return; }
+    if (body == NULL) { return false; }
 
     struct DjuiBaseRect* parentComp = &base->comp;
     f32 tPad = (base->padding.top.type == DJUI_SVT_RELATIVE)    ? parentComp->height * base->padding.top.value    : base->padding.top.value;
@@ -77,8 +109,8 @@ void djui_three_panel_render(struct DjuiBase* base) {
     }
 
     if (head != NULL) {
-        djui_base_set_location_type(head, DJUI_SVT_ABSOLUTE, DJUI_SVT_ABSOLUTE);
-        djui_base_set_location(head, 0, 0);
+        //djui_base_set_location_type(head, DJUI_SVT_ABSOLUTE, DJUI_SVT_ABSOLUTE);
+        //djui_base_set_location(head, 0, 0);
         djui_base_set_size_type(head, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
         djui_base_set_size(head, 1.0f, headerSize);
         djui_base_set_alignment(head, DJUI_HALIGN_LEFT, DJUI_VALIGN_TOP);
@@ -101,6 +133,7 @@ void djui_three_panel_render(struct DjuiBase* base) {
     }
 
     djui_rect_render(base);
+    return true;
 }
 
 static void djui_three_panel_destroy(struct DjuiBase* base) {
@@ -109,7 +142,7 @@ static void djui_three_panel_destroy(struct DjuiBase* base) {
 }
 
 struct DjuiThreePanel* djui_three_panel_create(struct DjuiBase* parent, f32 minHeaderSize, f32 bodySize, f32 minFooterSize) {
-    struct DjuiThreePanel* threePanel = malloc(sizeof(struct DjuiThreePanel));
+    struct DjuiThreePanel* threePanel = calloc(1, sizeof(struct DjuiThreePanel));
     struct DjuiBase* base = &threePanel->base;
 
     djui_base_init(parent, base, djui_three_panel_render, djui_three_panel_destroy);

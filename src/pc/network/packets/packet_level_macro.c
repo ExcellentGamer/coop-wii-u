@@ -37,7 +37,7 @@ static void network_send_level_macro_area(struct NetworkPlayer* destNp, u8 areaI
 
     // write header
     struct Packet p;
-    packet_init(&p, PACKET_LEVEL_MACRO, true, false);
+    packet_init(&p, PACKET_LEVEL_MACRO, true, PLMT_NONE);
     packet_write(&p, &gCurrCourseNum,  sizeof(s16));
     packet_write(&p, &gCurrActStarNum, sizeof(s16));
     packet_write(&p, &gCurrLevelNum,   sizeof(s16));
@@ -92,6 +92,12 @@ static void network_send_level_macro_area(struct NetworkPlayer* destNp, u8 areaI
             *macroSpecialCount = *macroSpecialCount + 1;
             u16 offset = respawnInfo - area->macroObjects;
             packet_write(&p, &offset,     sizeof(u16));
+            packet_write(&p, respawnInfo, sizeof(s16));
+            LOG_INFO("tx macro special: offset %d, respawnInfo %d", offset, *respawnInfo);
+        } else if ((behavior == bhvGoombaTripletSpawner) && *respawnInfo != 0) {
+            *macroSpecialCount = *macroSpecialCount + 1;
+            u16 offset = respawnInfo - area->macroObjects;
+            packet_write(&p, &offset, sizeof(u16));
             packet_write(&p, respawnInfo, sizeof(s16));
             LOG_INFO("tx macro special: offset %d, respawnInfo %d", offset, *respawnInfo);
         }
@@ -156,8 +162,8 @@ void network_receive_level_macro(struct Packet* p) {
             if (o->oSyncID != 0) {
                 struct SyncObject* so = &gSyncObjects[o->oSyncID];
                 if (so->o == o) {
+                    LOG_INFO("rx macro deletion: sync object (id %d)", o->oSyncID);
                     network_forget_sync_object(so);
-                    LOG_INFO("rx macro deletion: sync object");
                 }
             }
         }
@@ -196,6 +202,22 @@ void network_receive_level_macro(struct Packet* p) {
                     }
                 }
                 LOG_INFO("rx macro special: coin formation");
+            } else if (behavior == bhvGoombaTripletSpawner) {
+                for (int i = 0; i < OBJECT_POOL_CAPACITY; i++) {
+                    struct Object* o2 = &gObjectPool[i];
+                    if (o2->parentObj != o) { continue; }
+                    if (o2 == o) { continue; }
+                    if (o2->behavior != bhvGoomba) { continue; }
+                    u16 info = (*respawnInfo >> 8);
+                    u8 mask = ((o2->oBehParams2ndByte & GOOMBA_BP_TRIPLET_FLAG_MASK) >> 2);
+                    if (info & mask) {
+                        extern void mark_goomba_as_dead(void);
+                        gCurrentObject = o2;
+                        mark_goomba_as_dead();
+                        obj_mark_for_deletion(o2);
+                    }
+                }
+                LOG_INFO("rx macro special: goomba triplet");
             }
         }
     }

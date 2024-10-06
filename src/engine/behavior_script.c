@@ -951,6 +951,45 @@ static BhvCommandProc BehaviorCmdTable[] = {
 
 // Execute the behavior script of the current object, process the object flags, and other miscellaneous code for updating objects.
 void cur_obj_update(void) {
+    // handle network area timer
+    if (gCurrentObject->areaTimerType != AREA_TIMER_TYPE_NONE) {
+        // make sure the area is valid
+        if (gNetworkPlayerLocal == NULL || !gNetworkPlayerLocal->currAreaSyncValid) {
+            goto cur_obj_update_end;
+        }
+
+        // catch up the timer in total loop increments
+        if (gCurrentObject->areaTimerType == AREA_TIMER_TYPE_LOOP) {
+            assert(gCurrentObject->areaTimerDuration > 0);
+            u32 difference = (gNetworkAreaTimer - gCurrentObject->areaTimer);
+            if (difference >= gCurrentObject->areaTimerDuration) {
+                u32 catchup = difference / gCurrentObject->areaTimerDuration;
+                catchup *= gCurrentObject->areaTimerDuration;
+                gCurrentObject->areaTimer += catchup;
+            }
+        }
+
+        // catch up the timer for maximum
+        if (gCurrentObject->areaTimerType == AREA_TIMER_TYPE_MAXIMUM) {
+            assert(gCurrentObject->areaTimerDuration > 0);
+            u32 difference = (gNetworkAreaTimer - gCurrentObject->areaTimer);
+            if (difference >= gCurrentObject->areaTimerDuration) {
+                if (gCurrentObject->areaTimer < 10) {
+                    gCurrentObject->areaTimer = gNetworkAreaTimer;
+                } else {
+                    gCurrentObject->areaTimer = (gNetworkAreaTimer - gCurrentObject->areaTimerDuration);
+                }
+            }
+        }
+
+        // cancel object update if it's running faster than the timer
+        if (gCurrentObject->areaTimer > gNetworkAreaTimer) {
+            goto cur_obj_update_end;
+        }
+    }
+
+cur_obj_update_begin:;
+
     UNUSED u32 unused;
 
     s16 objFlags = gCurrentObject->oFlags;
@@ -1036,84 +1075,58 @@ void cur_obj_update(void) {
     } else if ((objFlags & OBJ_FLAG_COMPUTE_DIST_TO_MARIO) && gCurrentObject->collisionData == NULL) {
         if (!(objFlags & OBJ_FLAG_ACTIVE_FROM_AFAR)) {
             // If the object has a render distance, check if it should be shown.
-#ifndef NODRAWINGDISTANCE
-            if (distanceFromMario > gCurrentObject->oDrawingDistance) {
+            if (distanceFromMario > gCurrentObject->oDrawingDistance * draw_distance_scalar()) {
                 // Out of render distance, hide the object.
                 gCurrentObject->header.gfx.node.flags &= ~GRAPH_RENDER_ACTIVE;
                 gCurrentObject->activeFlags |= ACTIVE_FLAG_FAR_AWAY;
             } else if (gCurrentObject->oHeldState == HELD_FREE) {
-#else
-            if (distanceFromMario <= gCurrentObject->oDrawingDistance && gCurrentObject->oHeldState == HELD_FREE) {
-#endif
                 // In render distance (and not being held), show the object.
                 gCurrentObject->header.gfx.node.flags |= GRAPH_RENDER_ACTIVE;
                 gCurrentObject->activeFlags &= ~ACTIVE_FLAG_FAR_AWAY;
             }
         }
     }
+
+    // update network area timer
+    if (gCurrentObject->areaTimerType != AREA_TIMER_TYPE_NONE) {
+        gCurrentObject->areaTimer++;
+        if (gCurrentObject->areaTimer < gNetworkAreaTimer) {
+            goto cur_obj_update_begin;
+        }
+    }
+
+    // call the network area timer's run-once callback
+cur_obj_update_end:;
+    if (gCurrentObject->areaTimerType != AREA_TIMER_TYPE_NONE) {
+        if (gCurrentObject->areaTimerRunOnceCallback != NULL) {
+            gCurrentObject->areaTimerRunOnceCallback();
+        }
+    }
 }
 
-// Execute the behavior script of the current object, process the object flags, and other miscellaneous code for updating objects.
-void cur_obj_fake_update(void) {
-    UNUSED u32 unused;
+u16 position_based_random_u16(void) {
+    u16 value = (u16)(gCurrentObject->oPosX * 17);
+    value ^= (u16)(gCurrentObject->oPosY * 613);
+    value ^= (u16)(gCurrentObject->oPosZ * 3331);
+    return value;
+}
 
-    s16 objFlags = gCurrentObject->oFlags;
+f32 position_based_random_float_position(void) {
+    f32 rnd = position_based_random_u16();
+    return rnd / (double)0x10000;
+}
 
-    // Increment the object's timer.
-    if (gCurrentObject->oTimer < 0x3FFFFFFF) {
-        gCurrentObject->oTimer++;
-    }
+u8 cur_obj_is_last_nat_update_per_frame(void) {
+    return (gCurrentObject->areaTimer == (gNetworkAreaTimer - 1));
+}
 
-    // If the object's action has changed, reset the action timer.
-    if (gCurrentObject->oAction != gCurrentObject->oPrevAction) {
-        (void) (gCurrentObject->oTimer = 0, gCurrentObject->oSubAction = 0,
-                gCurrentObject->oPrevAction = gCurrentObject->oAction);
-    }
-
-    // Execute various code based on object flags.
-    objFlags = (s16) gCurrentObject->oFlags;
-
-    if (objFlags & OBJ_FLAG_SET_FACE_ANGLE_TO_MOVE_ANGLE) {
-        obj_set_face_angle_to_move_angle(gCurrentObject);
-    }
-
-    if (objFlags & OBJ_FLAG_SET_FACE_YAW_TO_MOVE_YAW) {
-        gCurrentObject->oFaceAngleYaw = gCurrentObject->oMoveAngleYaw;
-    }
-
-    if (objFlags & OBJ_FLAG_MOVE_XZ_USING_FVEL) {
-        cur_obj_move_xz_using_fvel_and_yaw();
-    }
-
-    if (objFlags & OBJ_FLAG_MOVE_Y_WITH_TERMINAL_VEL) {
-        cur_obj_move_y_with_terminal_vel();
-    }
-
-    if (objFlags & OBJ_FLAG_TRANSFORM_RELATIVE_TO_PARENT) {
-        obj_build_transform_relative_to_parent(gCurrentObject);
-    }
-
-    if (objFlags & OBJ_FLAG_SET_THROW_MATRIX_FROM_TRANSFORM) {
-        obj_set_throw_matrix_from_transform(gCurrentObject);
-    }
-
-    if (objFlags & OBJ_FLAG_UPDATE_GFX_POS_AND_ANGLE) {
-        obj_update_gfx_pos_and_angle(gCurrentObject);
-    }
-
-    // Calculate the distance from the object to Mario.
-    if (objFlags & OBJ_FLAG_COMPUTE_DIST_TO_MARIO) {
-        gCurrentObject->oDistanceToMario = dist_between_objects(gCurrentObject, gMarioObject);
-    }
-
-    // Calculate the angle from the object to Mario.
-    if (objFlags & OBJ_FLAG_COMPUTE_ANGLE_TO_MARIO) {
-        gCurrentObject->oAngleToMario = obj_angle_to_object(gCurrentObject, gMarioObject);
-    }
-
-    // If the object's action has changed, reset the action timer.
-    if (gCurrentObject->oAction != gCurrentObject->oPrevAction) {
-        (void)(gCurrentObject->oTimer = 0, gCurrentObject->oSubAction = 0,
-            gCurrentObject->oPrevAction = gCurrentObject->oAction);
+f32 draw_distance_scalar(void) {
+    switch (configDrawDistance) {
+        case 0: return 0.5f;
+        case 1: return 1.0f;
+        case 2: return 1.5f;
+        case 3: return 3.0f;
+        case 4: return 10.0f;
+        default: return 999.0f;
     }
 }

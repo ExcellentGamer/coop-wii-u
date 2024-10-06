@@ -22,7 +22,6 @@
 
 #include "gfx/gfx_dxgi.h"
 #include "gfx/gfx_sdl.h"
-#include "gfx/gfx_whb.h"
 
 #include "audio/audio_api.h"
 #include "audio/audio_sdl.h"
@@ -43,7 +42,8 @@
 #include "pc/discord/discordrpc.h"
 #endif
 #include "pc/network/version.h"
-#include "menu/custom_menu_system.h"
+#include "pc/network/network_player.h"
+#include "pc/djui/djui.h"
 
 OSMesg D_80339BEC;
 OSMesgQueue gSIEventMesgQueue;
@@ -67,10 +67,10 @@ extern void thread5_game_loop(void *arg);
 extern void create_next_audio_buffer(s16 *samples, u32 num_samples);
 void game_loop_one_iteration(void);
 
-void dispatch_audio_sptask(struct SPTask *spTask) {
+void dispatch_audio_sptask(UNUSED struct SPTask *spTask) {
 }
 
-void set_vblank_handler(s32 index, struct VblankHandler *handler, OSMesgQueue *queue, OSMesg *msg) {
+void set_vblank_handler(UNUSED s32 index, UNUSED struct VblankHandler *handler, UNUSED OSMesgQueue *queue, UNUSED OSMesg *msg) {
 }
 
 static bool inited = false;
@@ -139,10 +139,12 @@ void produce_one_frame(void) {
 
     gfx_end_frame();
 
-    gfx_start_frame();
-    patch_interpolations();
-    send_display_list(gGfxSPTask);
-    gfx_end_frame();
+    if (config60Fps) {
+        gfx_start_frame();
+        patch_interpolations();
+        send_display_list(gGfxSPTask);
+        gfx_end_frame();
+    }
 }
 
 void audio_shutdown(void) {
@@ -157,21 +159,17 @@ void game_deinit(void) {
     discord_shutdown();
 #endif
     configfile_save(configfile_name());
-#ifndef TARGET_WII_U
     controller_shutdown();
     audio_shutdown();
     gfx_shutdown();
-#endif
-    network_shutdown();
+    network_shutdown(true);
     inited = false;
 }
 
 void game_exit(void) {
-#ifndef TARGET_WII_U
     game_deinit();
 #ifndef TARGET_WEB
     exit(0);
-#endif
 #endif
 }
 
@@ -215,22 +213,15 @@ void main_func(void) {
     fs_init(sys_ropaths, gamedir, userpath);
 
     configfile_load(configfile_name());
+    if (configPlayerModel >= CT_MAX) { configPlayerModel = 0; }
+    if (configPlayerPalette >= 16) { configPlayerPalette = 0; }
 
-    #ifdef TARGET_WII_U
-    configfile_save(configfile_name()); // Mount SD write now
-    #else
     if (gCLIOpts.FullScreen == 1)
         configWindow.fullscreen = true;
     else if (gCLIOpts.FullScreen == 2)
         configWindow.fullscreen = false;
-    #endif
 
-    const size_t poolsize = 
-    #ifdef TARGET_WII_U
-    gCLIOpts.PoolSize ? gCLIOpts.PoolSize : 
-    #endif
-    DEFAULT_POOL_SIZE;
-
+    const size_t poolsize = gCLIOpts.PoolSize ? gCLIOpts.PoolSize : DEFAULT_POOL_SIZE;
     u64 *pool = malloc(poolsize);
     if (!pool) sys_fatal("Could not alloc %u bytes for main pool.\n", poolsize);
     main_pool_init(pool, pool + poolsize / sizeof(pool[0]));
@@ -240,8 +231,6 @@ void main_func(void) {
     wm_api = &gfx_sdl;
     #elif defined(WAPI_DXGI)
     wm_api = &gfx_dxgi;
-    #elif defined(WAPI_WHB)
-    wm_api = &gfx_whb_window;
     #else
     #error No window API!
     #endif
@@ -259,9 +248,6 @@ void main_func(void) {
     # else
     #  define RAPI_NAME "OpenGL"
     # endif
-    #elif defined(RAPI_WHB)
-    rendering_api = &gfx_whb_api;
-    # define RAPI_NAME "WHB - GX2"
     #else
     #error No rendering API!
     #endif
@@ -275,9 +261,7 @@ void main_func(void) {
 #endif
 
     gfx_init(wm_api, rendering_api, window_title);
-    #ifndef TARGET_WII_U
     wm_api->set_keyboard_callbacks(keyboard_on_key_down, keyboard_on_key_up, keyboard_on_all_keys_up, keyboard_on_text_input);
-    #endif
 
     #if defined(AAPI_SDL1) || defined(AAPI_SDL2)
     if (audio_api == NULL && audio_sdl.init()) 
@@ -288,6 +272,12 @@ void main_func(void) {
         audio_api = &audio_null;
     }
 
+    djui_init();
+
+#ifdef UNSTABLE_BRANCH
+    djui_popup_create("This is an \\#ffa0a0\\unstable\\#dcdcdc\\ branch build.\nExpect many strange bugs.", 2);
+#endif
+
     if (gCLIOpts.Network == NT_CLIENT) {
         network_set_system(NS_SOCKET);
         strncpy(configJoinIp, gCLIOpts.JoinIp, IP_MAX_LEN);
@@ -297,16 +287,14 @@ void main_func(void) {
         network_set_system(NS_SOCKET);
         configHostPort = gCLIOpts.NetworkPort;
         network_init(NT_SERVER);
+        djui_panel_shutdown();
     } else {
         network_init(NT_NONE);
     }
 
-#ifdef UNSTABLE_BRANCH
-    custom_menu_error("This is an unstable branch build.\n\nExpect many strange bugs.\n\nFor a more stable experience use the normal coop branch.");
-#endif
-
     audio_init();
     sound_init();
+    network_player_init();
 
     thread5_game_loop(NULL);
 
@@ -329,11 +317,7 @@ void main_func(void) {
     emscripten_set_main_loop(em_main_loop, 0, 0);
     request_anim_frame(on_anim_frame);
 #else
-    #ifdef TARGET_WII_U
-    while (whb_window_is_running()) {
-    #else
     while (true) {
-    #endif
         wm_api->main_loop(produce_one_frame);
 #ifdef DISCORDRPC
         discord_update_rich_presence();
@@ -345,15 +329,8 @@ void main_func(void) {
 #endif
 }
 
-#ifdef TARGET_WII_U
-int main(UNUSED int argc, UNUSED char *argv[]) {
-    main_func();
-    return 0;
-}
-#else
 int main(int argc, char *argv[]) {
     parse_cli_opts(argc, argv);
     main_func();
     return 0;
 }
-#endif

@@ -8,10 +8,11 @@
 #include "game/area.h"
 #include "audio/external.h"
 #include "engine/surface_collision.h"
+#include "engine/math_util.h"
 #include "game/object_list_processor.h"
-#include "game/chat.h"
 #include "game/mario_misc.h"
 #include "pc/configfile.h"
+#include "pc/djui/djui.h"
 
 #pragma pack(1)
 struct PacketPlayerData {
@@ -185,12 +186,14 @@ static void write_packet_data(struct PacketPlayerData* data, struct MarioState* 
 
 void network_send_player(u8 localIndex) {
     if (gMarioStates[localIndex].marioObj == NULL) { return; }
+    if (gDjuiInMainMenu) { return; }
+    if (gNetworkPlayerLocal == NULL || !gNetworkPlayerLocal->currAreaSyncValid) { return; }
 
     struct PacketPlayerData data = { 0 };
     read_packet_data(&data, &gMarioStates[localIndex]);
 
     struct Packet p;
-    packet_init(&p, PACKET_PLAYER, false, true);
+    packet_init(&p, PACKET_PLAYER, false, PLMT_AREA);
     packet_write(&p, &gNetworkPlayers[localIndex].globalIndex, sizeof(u8));
     packet_write(&p, &data, sizeof(struct PacketPlayerData));
     network_send(&p);
@@ -202,8 +205,19 @@ void network_receive_player(struct Packet* p) {
     struct NetworkPlayer* np = network_player_from_global_index(globalIndex);
     if (np == NULL || np->localIndex == UNKNOWN_LOCAL_INDEX || !np->connected) { return; }
 
+    // prevent receiving a packet about our player
+    if (gNetworkPlayerLocal && globalIndex == gNetworkPlayerLocal->globalIndex) { return; }
+
     struct MarioState* m = &gMarioStates[np->localIndex];
     if (m == NULL || m->marioObj == NULL) { return; }
+
+    // prevent receiving player from other area
+    bool levelAreaMismatch = ((gNetworkPlayerLocal == NULL)
+        || np->currCourseNum != gNetworkPlayerLocal->currCourseNum
+        || np->currActNum    != gNetworkPlayerLocal->currActNum
+        || np->currLevelNum  != gNetworkPlayerLocal->currLevelNum
+        || np->currAreaIndex != gNetworkPlayerLocal->currAreaIndex);
+    if (levelAreaMismatch) { return; }
 
     // save previous state
     struct PacketPlayerData oldData = { 0 };
@@ -314,7 +328,7 @@ void network_receive_player(struct Packet* p) {
     if ((m->action == ACT_PUNCHING || m->action == ACT_MOVE_PUNCHING)) {
         // play first punching sound, otherwise it will be missed
         if (m->action != oldData.action) {
-            play_sound(get_character_sound(m)->soundPunchYah, m->marioObj->header.gfx.cameraToObject);
+            play_character_sound(m, CHAR_SOUND_PUNCH_YAH);
         }
         // make the first punch large, otherwise it will be missed
         if (m->actionArg == 2 && oldData.actionArg == 1) {
@@ -324,7 +338,11 @@ void network_receive_player(struct Packet* p) {
 
     // inform of player death
     if (oldData.action != ACT_BUBBLED && data.action == ACT_BUBBLED) {
-        chat_add_message_ext("player died", CMT_SYSTEM, get_player_color(globalIndex, 0));
+        // display popup
+        u8* rgb = get_player_color(np->paletteIndex, 0);
+        char popupMsg[128] = { 0 };
+        snprintf(popupMsg, 128, "\\#%02x%02x%02x\\%s\\#dcdcdc\\ died.", rgb[0], rgb[1], rgb[2], np->name);
+        djui_popup_create(popupMsg, 1);
     }
 
     // action changed, reset timer
@@ -332,12 +350,15 @@ void network_receive_player(struct Packet* p) {
         m->actionTimer = 0;
     }
 
-    // set model
-    enum CharacterType characterType = (np->globalIndex == 0) ? CT_MARIO : CT_LUIGI;
-    m->character = &gCharacters[characterType];
-    m->marioObj->header.gfx.sharedChild = gLoadedGraphNodes[m->character->modelId];
+    // mark this player as visible
+    if (gNetworkAreaLoaded && !m->wasNetworkVisible) {
+        m->wasNetworkVisible = true;
+        vec3f_copy(m->marioObj->header.gfx.pos, m->pos);
+        vec3s_copy(m->marioObj->header.gfx.angle, m->faceAngle);
+    }
 }
 
 void network_update_player(void) {
+    if (!network_player_any_connected()) { return; }
     network_send_player(0);
 }

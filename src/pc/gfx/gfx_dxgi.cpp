@@ -42,6 +42,17 @@
 #define FRAME_INTERVAL_US_DENOMINATOR 6
 #endif
 
+// TODO: figure out if this shit even works
+#ifdef VERSION_EU
+# define FRAMERATE 25
+#else
+# define FRAMERATE 30
+#endif
+// time between consequtive game frames
+static const f64 sFrameTime = 1.0 / ((double)FRAMERATE);
+static f64 sFrameTargetTime = 0;
+extern "C" f64 clock_elapsed_f64(void);
+
 using namespace Microsoft::WRL; // For ComPtr
 
 static bool inTextInput = false;
@@ -161,8 +172,6 @@ static void toggle_borderless_window_full_screen(bool enable) {
             ShowWindow(dxgi.h_wnd, SW_RESTORE);
         }
 
-        ShowCursor(TRUE);
-
         dxgi.is_full_screen = false;
     } else {
         // Save if window is maximized or not
@@ -190,8 +199,6 @@ static void toggle_borderless_window_full_screen(bool enable) {
         // Set borderless full screen to that monitor
         SetWindowLongPtr(dxgi.h_wnd, GWL_STYLE, WS_VISIBLE | WS_POPUP);
         SetWindowPos(dxgi.h_wnd, HWND_TOP, r.left, r.top, r.right - r.left, r.bottom - r.top, SWP_FRAMECHANGED);
-
-        ShowCursor(FALSE);
 
         dxgi.is_full_screen = true;
     }
@@ -357,6 +364,9 @@ static void gfx_dxgi_init(const char *window_title) {
 
     ShowWindow(dxgi.h_wnd, SW_SHOW);
     UpdateWindow(dxgi.h_wnd);
+    if (configWindow.fullscreen) {
+        ShowCursor(FALSE);
+    }
 
     update_screen_settings();
 }
@@ -396,7 +406,8 @@ static uint64_t qpc_to_us(uint64_t qpc) {
 }
 
 static bool gfx_dxgi_start_frame(void) {
-    DXGI_FRAME_STATISTICS stats;
+    // HACK: all of this is too confusing to bother with right now
+    /*DXGI_FRAME_STATISTICS stats;
     if (dxgi.swap_chain->GetFrameStatistics(&stats) == S_OK && (stats.SyncRefreshCount != 0 || stats.SyncQPCTime.QuadPart != 0ULL)) {
         {
             LARGE_INTEGER t0;
@@ -508,13 +519,38 @@ static bool gfx_dxgi_start_frame(void) {
         dxgi.length_in_vsync_frames = vsyncs_to_wait;
     } else {
         dxgi.length_in_vsync_frames = 2;
+    }*/
+
+    dxgi.length_in_vsync_frames = configWindow.vsync;
+    f64 curTime = clock_elapsed_f64();
+    f64 frameTime = config60Fps ? (sFrameTime / 2.0) : sFrameTime;
+    if (curTime > sFrameTargetTime) {
+        sFrameTargetTime += frameTime;
+        if (curTime > sFrameTargetTime + frameTime * 3) {
+            sFrameTargetTime = curTime;
+        }
+        dxgi.dropped_frame = true;
+        return false;
     }
+    dxgi.dropped_frame = false;
 
     return true;
 }
 
+static inline void sync_framerate_with_timer(void) {
+    f64 curTime = clock_elapsed_f64();
+    if (curTime < sFrameTargetTime) {
+        u32 delayMs = (sFrameTargetTime - curTime) * 1000.0;
+        if (delayMs > 0) {
+            Sleep(delayMs);
+        }
+    }
+    f64 frameTime = config60Fps ? (sFrameTime / 2.0) : sFrameTime;
+    sFrameTargetTime += frameTime;
+}
+
 static void gfx_dxgi_swap_buffers_begin(void) {
-    //dxgi.length_in_vsync_frames = 1;
+    sync_framerate_with_timer();
     ThrowIfFailed(dxgi.swap_chain->Present(dxgi.length_in_vsync_frames, 0));
     UINT this_present_id;
     if (dxgi.swap_chain->GetLastPresentCount(&this_present_id) == S_OK) {
@@ -528,12 +564,12 @@ static void gfx_dxgi_swap_buffers_end(void) {
     QueryPerformanceCounter(&t0);
     QueryPerformanceCounter(&t1);
 
-    if (!dxgi.dropped_frame) {
+    /*if (!dxgi.dropped_frame) {
         if (dxgi.waitable_object != nullptr) {
             WaitForSingleObject(dxgi.waitable_object, INFINITE);
         }
         // else TODO: maybe sleep until some estimated time the frame will be shown to reduce lag
-    }
+    }*/
 
     DXGI_FRAME_STATISTICS stats;
     dxgi.swap_chain->GetFrameStatistics(&stats);
@@ -637,6 +673,22 @@ static char* gfx_dxgi_get_clipboard_text(void) {
     return NULL;
 }
 
+void gfx_dxgi_set_clipboard_text(char* text) {
+    if (OpenClipboard(NULL)) {
+        HGLOBAL clipbuffer;
+        char *buffer;
+        EmptyClipboard();
+        clipbuffer = GlobalAlloc(GMEM_DDESHARE, strlen(text) + 1);
+        buffer = (char *) GlobalLock(clipbuffer);
+        strcpy(buffer, LPCSTR(text));
+        GlobalUnlock(clipbuffer);
+        SetClipboardData(CF_TEXT, clipbuffer);
+        CloseClipboard();
+    }
+}
+
+void gfx_dxgi_set_cursor_visible(bool visible) { ShowCursor(visible); }
+
 void ThrowIfFailed(HRESULT res) {
     if (FAILED(res)) {
         fprintf(stderr, "Error: 0x%08X\n", res);
@@ -668,6 +720,8 @@ struct GfxWindowManagerAPI gfx_dxgi = {
     gfx_dxgi_start_text_input,
     gfx_dxgi_stop_text_input,
     gfx_dxgi_get_clipboard_text,
+    gfx_dxgi_set_clipboard_text,
+    gfx_dxgi_set_cursor_visible,
 };
 
 #endif

@@ -43,9 +43,13 @@ struct DjuiBase {
     struct DjuiBaseRect comp;
     struct DjuiBaseRect clip;
     struct DjuiInteractable* interactable;
+    bool addChildrenToHead;
+    bool abandonAfterChildRenderFail;
+    s32 tag;
+    void (*get_cursor_hover_location)(struct DjuiBase*, f32* x, f32* y);
     void (*on_child_render)(struct DjuiBase*, struct DjuiBase*);
     void (*on_render_pre)(struct DjuiBase*, bool*);
-    void (*render)(struct DjuiBase*);
+    bool (*render)(struct DjuiBase*);
     void (*destroy)(struct DjuiBase*);
 };
 
@@ -65,6 +69,6 @@ void djui_base_set_alignment(struct DjuiBase* base, enum DjuiHAlign hAlign, enum
 
 void djui_base_compute(struct DjuiBase* base);
 
-void djui_base_render(struct DjuiBase* base);
+bool djui_base_render(struct DjuiBase* base);
 void djui_base_destroy(struct DjuiBase* base);
-void djui_base_init(struct DjuiBase* parent, struct DjuiBase* base, void (*render)(struct DjuiBase*), void (*destroy)(struct DjuiBase*));
+void djui_base_init(struct DjuiBase* parent, struct DjuiBase* base, bool (*render)(struct DjuiBase*), void (*destroy)(struct DjuiBase*));

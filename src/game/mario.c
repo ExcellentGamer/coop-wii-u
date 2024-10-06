@@ -266,12 +266,10 @@ void play_mario_jump_sound(struct MarioState *m) {
     if (!(m->flags & MARIO_MARIO_SOUND_PLAYED)) {
 #ifndef VERSION_JP
         if (m->action == ACT_TRIPLE_JUMP) {
-            play_sound((get_character_sound(m)->soundYahooWahaYippee) + ((gAudioRandom % 5) << 16),
-                       m->marioObj->header.gfx.cameraToObject);
+            play_character_sound_offset(m, CHAR_SOUND_YAHOO_WAHA_YIPPEE, ((gAudioRandom % 5) << 16));
         } else {
 #endif
-            play_sound((get_character_sound(m)->soundYahWahHoo) + ((gAudioRandom % 3) << 16),
-                       m->marioObj->header.gfx.cameraToObject);
+            play_character_sound_offset(m, CHAR_SOUND_YAH_WAH_HOO, ((gAudioRandom % 3) << 16));
 #ifndef VERSION_JP
         }
 #endif
@@ -304,6 +302,11 @@ void play_sound_and_spawn_particles(struct MarioState *m, u32 soundBits, u32 wav
         } else if (m->terrainSoundAddend == (SOUND_TERRAIN_SNOW << 16)) {
             m->particleFlags |= PARTICLE_SNOW;
         }
+    }
+
+    if (soundBits == CHAR_SOUND_PUNCH_HOO) {
+        play_character_sound(m, CHAR_SOUND_PUNCH_HOO);
+        return;
     }
 
     if ((m->flags & MARIO_METAL_CAP) || soundBits == SOUND_ACTION_UNSTUCK_FROM_GROUND
@@ -377,7 +380,7 @@ void play_mario_sound(struct MarioState *m, s32 actionSound, s32 marioSound) {
     }
 
     if (marioSound != -1) {
-        play_sound_if_no_flag(m, marioSound, MARIO_MARIO_SOUND_PLAYED);
+        play_character_sound_if_no_flag(m, marioSound, MARIO_MARIO_SOUND_PLAYED);
     }
 }
 
@@ -1782,7 +1785,7 @@ void mario_update_hitbox_and_cap_model(struct MarioState *m) {
     }
 
     struct NetworkPlayer* np = &gNetworkPlayers[gMarioState->playerIndex];
-    u8 teleportFade = (m->flags & MARIO_TELEPORTING) || (np->type != NPT_LOCAL && np->connected && np->fadeOpacity < 32);
+    u8 teleportFade = (m->flags & MARIO_TELEPORTING) || (gMarioState->playerIndex != 0 && np->fadeOpacity < 32);
     if (teleportFade && (m->fadeWarpOpacity != 0xFF)) {
         bodyState->modelState &= ~0xFF;
         bodyState->modelState |= (0x100 | m->fadeWarpOpacity);
@@ -1834,8 +1837,8 @@ static u8 prevent_hang(u32 hangPreventionActions[], u8* hangPreventionIndex) {
     dumped = TRUE;
 
     // open the log
-    FILE* f = NULL;
-    if (!logfile_open(&f)) { return TRUE; }
+    FILE* f = logfile_open(LFT_HANG);
+    if (f == NULL) { return TRUE; }
 
     // complain to console
     printf("#######################################\n");
@@ -1850,7 +1853,7 @@ static u8 prevent_hang(u32 hangPreventionActions[], u8* hangPreventionIndex) {
     }
     fprintf(f, "(gMarioState->action: hang prevention end)\n");
 
-    logfile_close();
+    logfile_close(LFT_HANG);
 
     // force the crash in debug mode
 #ifdef DEBUG
@@ -1867,23 +1870,58 @@ s32 execute_mario_action(UNUSED struct Object *o) {
     s32 inLoop = TRUE;
     // hide inactive players
     struct NetworkPlayer* np = &gNetworkPlayers[gMarioState->playerIndex];
-    if (np->type != NPT_LOCAL) {
-        bool levelAreaMismatch =
-            (np->currCourseNum   != gCurrCourseNum
-            || np->currActNum    != gCurrActNum
-            || np->currLevelNum  != gCurrLevelNum
-            || np->currAreaIndex != gCurrAreaIndex);
+    if (gMarioState->playerIndex != 0) {
+        bool levelAreaMismatch = ((gNetworkPlayerLocal == NULL)
+            || np->currCourseNum != gNetworkPlayerLocal->currCourseNum
+            || np->currActNum    != gNetworkPlayerLocal->currActNum
+            || np->currLevelNum  != gNetworkPlayerLocal->currLevelNum
+            || np->currAreaIndex != gNetworkPlayerLocal->currAreaIndex);
 
-        if (!np->connected || levelAreaMismatch) {
+        bool fadedOut = gNetworkAreaLoaded && (levelAreaMismatch && gMarioState->wasNetworkVisible && np->fadeOpacity == 0);
+        bool wasNeverVisible = gNetworkAreaLoaded && !gMarioState->wasNetworkVisible;
+
+        if (!gNetworkAreaLoaded || fadedOut || wasNeverVisible) {
             gMarioState->marioObj->header.gfx.node.flags |= GRAPH_RENDER_INVISIBLE;
             gMarioState->marioObj->oIntangibleTimer = -1;
+            mario_stop_riding_and_holding(gMarioState);
+
+            // drop their held object
+            if (gMarioState->heldObj != NULL) {
+                LOG_INFO("dropping held object");
+                u8 tmpPlayerIndex = gMarioState->playerIndex;
+                gMarioState->playerIndex = 0;
+                mario_drop_held_object(gMarioState);
+                gMarioState->playerIndex = tmpPlayerIndex;
+            }
+
+            // no longer held by an object
+            if (gMarioState->heldByObj != NULL) {
+                LOG_INFO("dropping heldby object");
+                gMarioState->heldByObj = NULL;
+            }
+
+            // no longer riding object
+            if (gMarioState->riddenObj != NULL) {
+                LOG_INFO("dropping ridden object");
+                u8 tmpPlayerIndex = gMarioState->playerIndex;
+                gMarioState->playerIndex = 0;
+                mario_stop_riding_object(gMarioState);
+                gMarioState->playerIndex = tmpPlayerIndex;
+            }
+
             return 0;
         }
-        if (np->fadeOpacity < 32) {
-            if (!(gMarioState->flags & MARIO_TELEPORTING)) {
-                np->fadeOpacity += 2;
-                gMarioState->fadeWarpOpacity = np->fadeOpacity << 3;
+
+        if (levelAreaMismatch && gMarioState->wasNetworkVisible) {
+            if (np->fadeOpacity <= 2) {
+                np->fadeOpacity = 0;
+            } else {
+                np->fadeOpacity -= 2;
             }
+            gMarioState->fadeWarpOpacity = np->fadeOpacity << 3;
+        } else if (np->fadeOpacity < 32) {
+            np->fadeOpacity += 2;
+            gMarioState->fadeWarpOpacity = np->fadeOpacity << 3;
         }
     }
 
@@ -1915,10 +1953,10 @@ s32 execute_mario_action(UNUSED struct Object *o) {
 
         // HACK: mute snoring even when we skip the waking up action
         if (gMarioState->isSnoring && gMarioState->action != ACT_SLEEPING) {
-                func_803205E8(get_character_sound(gMarioState)->soundSnoring1, gMarioState->marioObj->header.gfx.cameraToObject);
-                func_803205E8(get_character_sound(gMarioState)->soundSnoring2, gMarioState->marioObj->header.gfx.cameraToObject);
+                func_803205E8(get_character(gMarioState)->soundSnoring1, gMarioState->marioObj->header.gfx.cameraToObject);
+                func_803205E8(get_character(gMarioState)->soundSnoring2, gMarioState->marioObj->header.gfx.cameraToObject);
 #ifndef VERSION_JP
-                func_803205E8(get_character_sound(gMarioState)->soundSnoring3, gMarioState->marioObj->header.gfx.cameraToObject);
+                func_803205E8(get_character(gMarioState)->soundSnoring3, gMarioState->marioObj->header.gfx.cameraToObject);
 #endif
                 gMarioState->isSnoring = FALSE;
         }
@@ -2035,8 +2073,6 @@ s32 force_idle_state(struct MarioState* m) {
  **************************************************/
 
 static void init_single_mario(struct MarioState* m) {
-    Vec3s capPos;
-    struct Object* capObject;
 
     u16 playerIndex = m->playerIndex;
     struct SpawnInfo* spawnInfo = &gPlayerSpawnInfos[playerIndex];
@@ -2050,11 +2086,12 @@ static void init_single_mario(struct MarioState* m) {
 
     m->invincTimer = 0;
 
-    if (save_file_get_flags() & (SAVE_FLAG_CAP_ON_GROUND | SAVE_FLAG_CAP_ON_KLEPTO | SAVE_FLAG_CAP_ON_UKIKI | SAVE_FLAG_CAP_ON_MR_BLIZZARD)) {
+    // always put the cap on head
+    /*if (save_file_get_flags() & (SAVE_FLAG_CAP_ON_GROUND | SAVE_FLAG_CAP_ON_KLEPTO | SAVE_FLAG_CAP_ON_UKIKI | SAVE_FLAG_CAP_ON_MR_BLIZZARD)) {
         m->flags = 0;
-    } else {
+    } else {*/
         m->flags = (MARIO_CAP_ON_HEAD | MARIO_NORMAL_CAP);
-    }
+    //}
 
     m->forwardVel = 0.0f;
     m->squishTimer = 0;
@@ -2113,9 +2150,14 @@ static void init_single_mario(struct MarioState* m) {
     m->marioObj->oMoveAngleYaw = m->faceAngle[1];
     m->marioObj->oMoveAngleRoll = m->faceAngle[2];
 
+    m->marioObj->oIntangibleTimer = 0;
+
     vec3f_copy(m->marioObj->header.gfx.pos, m->pos);
     vec3s_set(m->marioObj->header.gfx.angle, 0, m->faceAngle[1], 0);
 
+    // cap will never be lying on the ground in coop
+    /* struct Object* capObject;
+    Vec3s capPos;
     if (save_file_get_cap_pos(capPos)) {
         capObject = spawn_object(m->marioObj, MODEL_MARIOS_CAP, bhvNormalCap);
 
@@ -2126,11 +2168,19 @@ static void init_single_mario(struct MarioState* m) {
         capObject->oForwardVelS32 = 0;
 
         capObject->oMoveAngleYaw = 0;
+    }*/
+
+    // force all other players to be invisible by default
+    if (playerIndex != 0) {
+        m->marioObj->header.gfx.node.flags |= GRAPH_RENDER_INVISIBLE;
+        m->wasNetworkVisible = false;
+        gNetworkPlayers[playerIndex].fadeOpacity = 0;
     }
 
     // set mario/luigi model
-    enum CharacterType characterType = (globalIndex == 0) ? CT_MARIO : CT_LUIGI;
-    m->character = &gCharacters[characterType];
+    u8 modelIndex = gNetworkPlayers[playerIndex].modelIndex;
+    if (modelIndex >= CT_MAX) { modelIndex = 0; }
+    m->character = &gCharacters[modelIndex];
     m->marioObj->header.gfx.sharedChild = gLoadedGraphNodes[m->character->modelId];
 }
 

@@ -2,23 +2,30 @@
 
 static void djui_button_set_default_style(struct DjuiBase* base) {
     struct DjuiButton* button = (struct DjuiButton*)base;
-    djui_base_set_border_color(base, 173, 173, 173, 255);
-    djui_base_set_color(&button->rect->base, 200, 200, 200, 255);
+    u8 borderBrightness = button->style ? 100 : 150;
+    u8 rectBrightness   = button->style ? 150 : 222;
+    djui_base_set_border_color(base, borderBrightness, borderBrightness, borderBrightness, 255);
+    djui_base_set_color(&button->rect->base, rectBrightness, rectBrightness, rectBrightness, 255);
     djui_base_set_location(&button->text->base, 0.0f, 0.0f);
 }
 
-static void djui_button_on_hover_begin(struct DjuiBase* base) {
+void djui_button_set_style(struct DjuiButton* button, u8 style) {
+    button->style = style;
+    djui_button_set_default_style(&button->base);
+}
+
+static void djui_button_on_hover(struct DjuiBase* base) {
     struct DjuiButton* button = (struct DjuiButton*)base;
     djui_base_set_border_color(base, 0, 120, 215, 255);
     djui_base_set_color(&button->rect->base, 229, 241, 251, 255);
-    djui_base_set_location(&button->text->base, -0.5f, -0.5f);
+    djui_base_set_location(&button->text->base, -0.5f, -1.0f);
 }
 
 static void djui_button_on_hover_end(struct DjuiBase* base) {
     djui_button_set_default_style(base);
 }
 
-static void djui_button_on_cursor_down_begin(struct DjuiBase* base) {
+static void djui_button_on_cursor_down_begin(struct DjuiBase* base, UNUSED bool inputCursor) {
     struct DjuiButton* button = (struct DjuiButton*)base;
     djui_base_set_border_color(base, 0, 84, 153, 255);
     djui_base_set_color(&button->rect->base, 204, 228, 247, 255);
@@ -35,17 +42,16 @@ static void djui_button_destroy(struct DjuiBase* base) {
 }
 
 struct DjuiButton* djui_button_create(struct DjuiBase* parent, const char* message) {
-    struct DjuiButton* button = malloc(sizeof(struct DjuiButton));
+    struct DjuiButton* button = calloc(1, sizeof(struct DjuiButton));
     struct DjuiBase* base     = &button->base;
 
     djui_base_init(parent, base, NULL, djui_button_destroy);
     djui_base_set_size(base, 200, 64);
     djui_base_set_border_width(base, 2);
-    djui_interactable_create(base,
-        djui_button_on_hover_begin,
-        djui_button_on_hover_end,
-        djui_button_on_cursor_down_begin,
-        djui_button_on_cursor_down_end);
+    djui_interactable_create(base);
+    djui_interactable_hook_hover(base, djui_button_on_hover, djui_button_on_hover_end);
+    djui_interactable_hook_cursor_down(base, djui_button_on_cursor_down_begin, NULL, djui_button_on_cursor_down_end);
+    button->style = 0;
 
     struct DjuiRect* rect = djui_rect_create(&button->base);
     djui_base_set_size_type(&rect->base, DJUI_SVT_RELATIVE, DJUI_SVT_RELATIVE);

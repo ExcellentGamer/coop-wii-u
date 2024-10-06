@@ -26,13 +26,10 @@
 #include "macros.h"
 #include "pc/cheats.h"
 #include "pc/network/network.h"
+#include "pc/djui/djui.h"
 #ifdef BETTERCAMERA
 #include "bettercamera.h"
 #endif
-#ifdef EXT_OPTIONS_MENU
-#include "options_menu.h"
-#endif
-#include "chat.h"
 
 u16 gDialogColorFadeTimer;
 s8 gLastDialogLineNum;
@@ -846,19 +843,19 @@ void handle_menu_scrolling(s8 scrollDirection, s8 *currentIndex, s8 minIndex, s8
     u8 index = 0;
 
     if (scrollDirection == MENU_SCROLL_VERTICAL) {
-        if (gPlayer3Controller->rawStickY > 60) {
+        if (gPlayer1Controller->rawStickY > 60) {
             index++;
         }
 
-        if (gPlayer3Controller->rawStickY < -60) {
+        if (gPlayer1Controller->rawStickY < -60) {
             index += 2;
         }
     } else if (scrollDirection == MENU_SCROLL_HORIZONTAL) {
-        if (gPlayer3Controller->rawStickX > 60) {
+        if (gPlayer1Controller->rawStickX > 60) {
             index += 2;
         }
 
-        if (gPlayer3Controller->rawStickX < -60) {
+        if (gPlayer1Controller->rawStickX < -60) {
             index++;
         }
     }
@@ -1883,8 +1880,8 @@ void render_dialog_entries(void) {
         case DIALOG_STATE_VERTICAL:
             gDialogBoxOpenTimer = 0.0f;
 
-            if ((gPlayer3Controller->buttonPressed & A_BUTTON)
-                || (gPlayer3Controller->buttonPressed & B_BUTTON)) {
+            if ((gPlayer1Controller->buttonPressed & A_BUTTON)
+                || (gPlayer1Controller->buttonPressed & B_BUTTON)) {
                 if (gLastDialogPageStrPos == -1) {
                     handle_special_dialog_text(gDialogID);
                     gDialogBoxState = DIALOG_STATE_CLOSING;
@@ -2737,9 +2734,6 @@ s16 render_pause_courses_and_castle(void) {
 #ifdef VERSION_EU
     gInGameLanguage = eu_get_language();
 #endif
-#ifdef EXT_OPTIONS_MENU
-    if (optmenu_open == 0) {
-#endif
     switch (gDialogBoxState) {
         case DIALOG_STATE_OPENING:
             gDialogLineNum = 1;
@@ -2770,10 +2764,10 @@ s16 render_pause_courses_and_castle(void) {
             }
 
 #ifdef VERSION_EU
-            if (gPlayer3Controller->buttonPressed & (A_BUTTON | Z_TRIG | START_BUTTON))
+            if (gPlayer1Controller->buttonPressed & (A_BUTTON | Z_TRIG | START_BUTTON))
 #else
-            if (gPlayer3Controller->buttonPressed & A_BUTTON
-             || gPlayer3Controller->buttonPressed & START_BUTTON)
+            if (gPlayer1Controller->buttonPressed & A_BUTTON
+             || gPlayer1Controller->buttonPressed & START_BUTTON)
 #endif
             {
                 level_set_transition(0, 0);
@@ -2797,10 +2791,10 @@ s16 render_pause_courses_and_castle(void) {
             render_pause_castle_main_strings(104, 60);
 
 #ifdef VERSION_EU
-            if (gPlayer3Controller->buttonPressed & (A_BUTTON | Z_TRIG | START_BUTTON))
+            if (gPlayer1Controller->buttonPressed & (A_BUTTON | Z_TRIG | START_BUTTON))
 #else
-            if (gPlayer3Controller->buttonPressed & A_BUTTON
-             || gPlayer3Controller->buttonPressed & START_BUTTON)
+            if (gPlayer1Controller->buttonPressed & A_BUTTON
+             || gPlayer1Controller->buttonPressed & START_BUTTON)
 #endif
             {
                 level_set_transition(0, 0);
@@ -2816,14 +2810,10 @@ s16 render_pause_courses_and_castle(void) {
     if (gDialogTextAlpha < 250) {
         gDialogTextAlpha += 25;
     }
-#ifdef EXT_OPTIONS_MENU
-    } else {
-        shade_screen();
-        optmenu_draw();
-    }
-    optmenu_check_buttons();
-    optmenu_draw_prompt();
-#endif
+
+    if (gDjuiPanelPauseCreated) { shade_screen(); }
+    if (gPlayer1Controller->buttonPressed & R_TRIG)
+        djui_panel_pause_create(NULL);
 
     return 0;
 }
@@ -3114,8 +3104,8 @@ void render_save_confirmation(s16 x, s16 y, s8 *index, s16 sp6e)
     s16 xOffset = get_str_x_pos_from_center(160, textContinueWithoutSaveArr[gInGameLanguage], 12.0f);
 #else
     u8 textSaveAndContinue[] = { TEXT_SAVE_AND_CONTINUE };
-    u8 textSaveAndQuit[] = { TEXT_SAVE_AND_QUIT };
-    u8 textSaveExitGame[] = { TEXT_SAVE_EXIT_GAME };
+    //u8 textSaveAndQuit[] = { TEXT_SAVE_AND_QUIT };
+    //u8 textSaveExitGame[] = { TEXT_SAVE_EXIT_GAME };
     u8 textContinueWithoutSave[] = { TEXT_CONTINUE_WITHOUT_SAVING };
 #endif
 
@@ -3164,10 +3154,10 @@ s16 render_course_complete_screen(void) {
             render_save_confirmation(100, 86, &gDialogLineNum, 20);
 #endif
             if (gCourseDoneMenuTimer > 110
-                && (gPlayer3Controller->buttonPressed & A_BUTTON
-                 || gPlayer3Controller->buttonPressed & START_BUTTON
+                && (gPlayer1Controller->buttonPressed & A_BUTTON
+                 || gPlayer1Controller->buttonPressed & START_BUTTON
 #ifdef VERSION_EU
-                 || gPlayer3Controller->buttonPressed & Z_TRIG
+                 || gPlayer1Controller->buttonPressed & Z_TRIG
 #endif
                 )) {
                 level_set_transition(0, 0);
@@ -3199,8 +3189,6 @@ s16 render_menus_and_dialogs() {
     s16 mode = 0;
 
     create_dl_ortho_matrix();
-
-    render_chat();
 
     if (gMenuMode != -1) {
         switch (gMenuMode) {

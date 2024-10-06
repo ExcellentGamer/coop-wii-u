@@ -29,6 +29,7 @@
 #define RENDER_PAUSE_SCREEN       1
 #define RENDER_COURSE_DONE_SCREEN 2
 
+
 #if !defined(VERSION_JP) && !defined(VERSION_SH)
 extern u8 gDialogCharWidths[];
 #endif

@@ -3,9 +3,9 @@
 #include "activity.h"
 #include "lobby.h"
 #include "discord_network.h"
-#include "pc/debuglog.h"
-#include "menu/custom_menu_system.h"
 #include "pc/network/version.h"
+#include "pc/djui/djui.h"
+#include "pc/logfile.h"
 
 #if defined(_WIN32) || defined(_WIN64)
 #include <windows.h>
@@ -22,11 +22,19 @@ struct DiscordApplication app = { 0 };
 bool gDiscordInitialized = false;
 bool gDiscordFailed = false;
 
+static void discord_sdk_log_callback(UNUSED void* hook_data, enum EDiscordLogLevel level, const char* message) {
+    LOGFILE_INFO(LFT_DISCORD, "callback (%d): %s", level, message);
+}
+
 void discord_fatal(int rc) {
 #if defined(_WIN32) || defined(_WIN64)
     char errorMessage[132] = { 0 };
     snprintf(errorMessage, 132, "Discord threw an error.\r\n\r\nTo fix: \r\n1. Close the game.\r\n2. Restart Discord.\r\n3. Start the game.\r\n\r\nRC: %d", rc);
-    int msgboxID = MessageBox(NULL,
+    fflush(stdout);
+    fflush(stderr);
+    LOGFILE_ERROR(LFT_DISCORD, "discord fatal %d", rc);
+    logfile_close(LFT_DISCORD);
+    MessageBox(NULL,
         errorMessage,
         "Fatal Discord Error",
         MB_ICONERROR | MB_OK | MB_DEFBUTTON1
@@ -84,13 +92,13 @@ static void set_instance_env_variable(void) {
     int instance = (gCLIOpts.Discord == 0) ? 0 : (gCLIOpts.Discord - 1);
     sprintf(environmentVariables, "DISCORD_INSTANCE_ID=%d", instance);
     putenv(environmentVariables);
-    LOG_INFO("set environment variables: %s", environmentVariables);
+    LOGFILE_INFO(LFT_DISCORD, "set environment variables: %s", environmentVariables);
 }
 
 static void get_oauth2_token_callback(UNUSED void* data, enum EDiscordResult result, struct DiscordOAuth2Token* token) {
-    LOG_INFO("> get_oauth2_token_callback returned %d", result);
+    LOGFILE_INFO(LFT_DISCORD, "> get_oauth2_token_callback returned %d", result);
     if (result != DiscordResult_Ok) { return; }
-    LOG_INFO("OAuth2 token: %s", token->access_token);
+    LOGFILE_INFO(LFT_DISCORD, "OAuth2 token: %s", token->access_token);
 }
 
 static void register_launch_command(void) {
@@ -99,7 +107,7 @@ static void register_launch_command(void) {
 #if defined(_WIN32) || defined(_WIN64)
     HMODULE hModule = GetModuleHandle(NULL);
     if (hModule == NULL) {
-        LOG_ERROR("unable to retrieve absolute path!");
+        LOGFILE_ERROR(LFT_DISCORD, "unable to retrieve absolute path!");
         return;
     }
     GetModuleFileName(hModule, cmd, sizeof(cmd));
@@ -108,21 +116,22 @@ static void register_launch_command(void) {
     snprintf(path, MAX_LAUNCH_CMD - 1, "/proc/%d/exe", getpid());
     rc = readlink(path, cmd, MAX_LAUNCH_CMD - 1);
     if (rc <= 0) {
-        LOG_ERROR("unable to retrieve absolute path! rc = %d", rc);
+        LOGFILE_ERROR(LFT_DISCORD, "unable to retrieve absolute path! rc = %d", rc);
         return;
     }
 #endif
     strncat(cmd, " --discord 1", MAX_LAUNCH_CMD - 1);
     rc = app.activities->register_command(app.activities, cmd);
     if (rc != DiscordResult_Ok) {
-        LOG_ERROR("register command failed %d", rc);
+        LOGFILE_ERROR(LFT_DISCORD, "register command failed %d", rc);
         return;
     }
-    LOG_INFO("cmd: %s", cmd);
+    LOGFILE_INFO(LFT_DISCORD, "cmd: %s", cmd);
 }
 
 static void ns_discord_update(void) {
     if (!gDiscordInitialized) { return; }
+    discord_lobby_update();
     DISCORD_REQUIRE(app.core->run_callbacks(app.core));
     discord_network_flush();
 }
@@ -131,12 +140,10 @@ static bool ns_discord_initialize(enum NetworkType networkType) {
 #ifdef DEBUG
     set_instance_env_variable();
 #endif
-#ifdef UNSTABLE_BRANCH
-    if (networkType != NT_NONE) {
-        // refuse to host on discord for unstable branch
-        exit(1);
+
+    if (app.core != NULL) {
+        app.core->set_log_hook(app.core, DiscordLogLevel_Debug, NULL, discord_sdk_log_callback);
     }
-#endif
 
     if (!gDiscordInitialized) {
         // set up discord params
@@ -149,13 +156,21 @@ static bool ns_discord_initialize(enum NetworkType networkType) {
         params.activity_events = discord_activity_initialize();
         params.lobby_events = discord_lobby_initialize();
 
+        gCurLobbyId = 0;
+        gLobbyCreateRetry = false;
+        gLobbyCreateAttempts = 0;
+        gLobbyCreateAttemptElapsed = 0;
+
         int rc = DiscordCreate(DISCORD_VERSION, &params, &app.core);
+        if (app.core != NULL) {
+            app.core->set_log_hook(app.core, DiscordLogLevel_Debug, NULL, discord_sdk_log_callback);
+        }
         gDiscordFailed = false;
         if (networkType != NT_NONE) {
             DISCORD_REQUIRE(rc);
         } else if (rc) {
-            LOG_ERROR("DiscordCreate failed: %d", rc);
-            custom_menu_error("Could not detect Discord.\n\nTry closing the game,\nrestarting Discord,\nand opening the game again.");
+            LOGFILE_ERROR(LFT_DISCORD, "DiscordCreate failed: %d", rc);
+            djui_popup_create("\\#ffa0a0\\Error:\\#c8c8c8\\ Could not detect Discord.\n\\#a0a0a0\\Try closing the game, restarting Discord, and opening the game again.", 3);
             gDiscordFailed = true;
             return false;
         }
@@ -181,7 +196,7 @@ static bool ns_discord_initialize(enum NetworkType networkType) {
     if (networkType == NT_SERVER) { discord_lobby_create(); }
 
     gDiscordInitialized = true;
-    LOG_INFO("initialized");
+    LOGFILE_INFO(LFT_DISCORD, "initialized");
 
     return true;
 }
@@ -189,7 +204,7 @@ static bool ns_discord_initialize(enum NetworkType networkType) {
 static void ns_discord_shutdown(void) {
     if (!gDiscordInitialized) { return; }
     discord_lobby_leave();
-    LOG_INFO("shutdown");
+    LOGFILE_INFO(LFT_DISCORD, "shutdown");
 }
 
 struct NetworkSystem gNetworkSystemDiscord = {

@@ -594,6 +594,7 @@ struct Object *spawn_object_at_origin(struct Object *parent, UNUSED s32 unusedAr
     obj->parentObj = parent;
     obj->header.gfx.unk18 = parent->header.gfx.unk18;
     obj->header.gfx.unk19 = parent->header.gfx.unk18;
+    obj->globalPlayerIndex = 0;
 
     geo_obj_init((struct GraphNodeObject *) &obj->header.gfx, gLoadedGraphNodes[model], gVec3fZero,
                  gVec3sZero);
@@ -2637,12 +2638,9 @@ void cur_obj_if_hit_wall_bounce_away(void) {
 }
 
 s32 cur_obj_hide_if_mario_far_away_y(f32 distY) {
-    for (int i = 0; i < MAX_PLAYERS; i++) {
-        if (!is_player_active(&gMarioStates[i])) { continue; }
-        if (absf(o->oPosY - gMarioStates[i].marioObj->oPosY) < distY) {
-            cur_obj_unhide();
-            return FALSE;
-        }
+    if (absf(o->oPosY - gMarioStates[0].marioObj->oPosY) < distY * draw_distance_scalar()) {
+        cur_obj_unhide();
+        return FALSE;
     }
     cur_obj_hide();
     return TRUE;

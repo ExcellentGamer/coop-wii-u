@@ -31,6 +31,7 @@
 #include "save_file.h"
 #include "spawn_object.h"
 #include "spawn_sound.h"
+#include "engine/surface_load.h"
 #include "pc/network/network.h"
 #include "pc/network/reservation_area.h"
 #include "game/rng_position.h"
@@ -137,9 +138,11 @@ void turn_obj_away_from_surface(f32 velX, f32 velZ, f32 nX, UNUSED f32 nY, f32 n
                             f32 *objYawZ) {
     *objYawX = (nZ * nZ - nX * nX) * velX / (nX * nX + nZ * nZ)
                - 2 * velZ * (nX * nZ) / (nX * nX + nZ * nZ);
+    if (isnan(*objYawX)) { *objYawX = 0; }
 
     *objYawZ = (nX * nX - nZ * nZ) * velZ / (nX * nX + nZ * nZ)
                - 2 * velX * (nX * nZ) / (nX * nX + nZ * nZ);
+    if (isnan(*objYawZ)) { *objYawZ = 0; }
 }
 
 /**
@@ -514,15 +517,18 @@ s32 is_point_within_radius_of_mario(f32 x, f32 y, f32 z, s32 dist) {
 }
 
 u8 is_player_active(struct MarioState* m) {
+    if (gNetworkType == NT_NONE && m == &gMarioStates[0]) { return TRUE; }
+
     if (m->action == ACT_BUBBLED) { return FALSE; }
     struct NetworkPlayer* np = &gNetworkPlayers[m->playerIndex];
     if (np->type != NPT_LOCAL) {
         if (!np->connected) { return FALSE; }
+        if (gNetworkPlayerLocal == NULL) { return FALSE; }
         bool levelAreaMismatch =
-            (np->currCourseNum    != gCurrCourseNum
-             || np->currActNum    != gCurrActNum
-             || np->currLevelNum  != gCurrLevelNum
-             || np->currAreaIndex != gCurrAreaIndex);
+            (np->currCourseNum   != gNetworkPlayerLocal->currCourseNum
+            || np->currActNum    != gNetworkPlayerLocal->currActNum
+            || np->currLevelNum  != gNetworkPlayerLocal->currLevelNum
+            || np->currAreaIndex != gNetworkPlayerLocal->currAreaIndex);
         if (levelAreaMismatch) { return FALSE; }
     }
     return TRUE;
@@ -579,20 +585,13 @@ s32 is_point_close_to_object(struct Object *obj, f32 x, f32 y, f32 z, s32 dist) 
 /**
  * Sets an object as visible if within a certain distance of Mario's graphical position.
  */
-void set_object_visibility(struct Object *obj, UNUSED s32 dist) {
-#ifndef NODRAWINGDISTANCE
-    f32 objX = obj->oPosX;
-    f32 objY = obj->oPosY;
-    f32 objZ = obj->oPosZ;
-
-    if (is_point_within_radius_of_mario(objX, objY, objZ, dist) == TRUE) {
-#endif
+void set_object_visibility(struct Object *obj, s32 dist) {
+    int distanceToPlayer = dist_between_objects(obj, gMarioStates[0].marioObj);
+    if (distanceToPlayer < dist * draw_distance_scalar()) {
         obj->header.gfx.node.flags &= ~GRAPH_RENDER_INVISIBLE;
-#ifndef NODRAWINGDISTANCE
     } else {
         obj->header.gfx.node.flags |= GRAPH_RENDER_INVISIBLE;
     }
-#endif
 }
 
 /**
@@ -845,11 +844,11 @@ s32 UNUSED debug_sequence_tracker(s16 debugInputSequence[]) {
     }
 
     // If the third controller button pressed is next in sequence, reset timer and progress to next value.
-    if ((debugInputSequence[sDebugSequenceTracker] & gPlayer3Controller->buttonPressed) != 0) {
+    if ((debugInputSequence[sDebugSequenceTracker] & gPlayer1Controller->buttonPressed) != 0) {
         sDebugSequenceTracker++;
         sDebugTimer = 0;
     // If wrong input or timer reaches 10, reset sequence progress.
-    } else if (sDebugTimer == 10 || gPlayer3Controller->buttonPressed != 0) {
+    } else if (sDebugTimer == 10 || gPlayer1Controller->buttonPressed != 0) {
         sDebugSequenceTracker = 0;
         sDebugTimer = 0;
         return FALSE;

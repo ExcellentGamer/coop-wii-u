@@ -15,6 +15,7 @@
 
 #include "actors/common0.h"
 #include "actors/common1.h"
+#include "actors/custom0.h"
 #include "actors/group1.h"
 #include "actors/group2.h"
 #include "actors/group3.h"
@@ -32,6 +33,8 @@
 #include "actors/group15.h"
 #include "actors/group16.h"
 #include "actors/group17.h"
+#include "actors/zcustom0.h"
+
 #include "levels/bbh/header.h"
 #include "levels/castle_inside/header.h"
 #include "levels/hmc/header.h"
@@ -832,10 +835,10 @@ const BehaviorScript bhvWfRotatingWoodenPlatform[] = {
     BEGIN(OBJ_LIST_SURFACE),
     ID(id_bhvWfRotatingWoodenPlatform),
     OR_INT(oFlags, OBJ_FLAG_UPDATE_GFX_POS_AND_ANGLE),
+    CALL_NATIVE(bhv_wf_rotating_wooden_platform_init),
     LOAD_COLLISION_DATA(wf_seg7_collision_clocklike_rotation),
     BEGIN_LOOP(),
         CALL_NATIVE(bhv_wf_rotating_wooden_platform_loop),
-        CALL_NATIVE(load_object_collision_model),
     END_LOOP(),
 };
 
@@ -1745,7 +1748,6 @@ const BehaviorScript bhvWfSlidingTowerPlatform[] = {
     LOAD_COLLISION_DATA(wf_seg7_collision_platform),
     BEGIN_LOOP(),
         CALL_NATIVE(bhv_wf_sliding_tower_platform_loop),
-        CALL_NATIVE(load_object_collision_model),
     END_LOOP(),
 };
 
@@ -1767,7 +1769,6 @@ const BehaviorScript bhvWfSolidTowerPlatform[] = {
     LOAD_COLLISION_DATA(wf_seg7_collision_platform),
     BEGIN_LOOP(),
         CALL_NATIVE(bhv_wf_solid_tower_platform_loop),
-        CALL_NATIVE(load_object_collision_model),
     END_LOOP(),
 };
 
@@ -2010,6 +2011,7 @@ const BehaviorScript bhvBooCage[] = {
     OR_INT(oFlags, (OBJ_FLAG_SET_FACE_YAW_TO_MOVE_YAW | OBJ_FLAG_UPDATE_GFX_POS_AND_ANGLE)),
     SET_FLOAT(oGraphYOffset, 10),
     SET_OBJ_PHYSICS(/*Wall hitbox radius*/ 30, /*Gravity*/ -400, /*Bounciness*/ -50, /*Drag strength*/ 0, /*Friction*/ 0, /*Buoyancy*/ 200, /*Unused*/ 0, 0),
+    CALL_NATIVE(bhv_boo_cage_init),
     BEGIN_LOOP(),
         CALL_NATIVE(bhv_boo_cage_loop),
     END_LOOP(),
@@ -2694,7 +2696,6 @@ const BehaviorScript bhvLllBowserPuzzlePiece[] = {
     SET_FLOAT(oCollisionDistance, 3000),
     BEGIN_LOOP(),
         CALL_NATIVE(bhv_lll_bowser_puzzle_piece_loop),
-        CALL_NATIVE(load_object_collision_model),
     END_LOOP(),
 };
 
@@ -2852,6 +2853,7 @@ const BehaviorScript bhvExclamationBox[] = {
     OR_INT(oFlags, OBJ_FLAG_UPDATE_GFX_POS_AND_ANGLE),
     SET_FLOAT(oCollisionDistance, 300),
     SET_HOME(),
+    CALL_NATIVE(bhv_exclamation_box_init),
     BEGIN_LOOP(),
         CALL_NATIVE(bhv_exclamation_box_loop),
     END_LOOP(),
@@ -4633,7 +4635,6 @@ const BehaviorScript bhvSmallBomp[] = {
     CALL_NATIVE(bhv_small_bomp_init),
     BEGIN_LOOP(),
         CALL_NATIVE(bhv_small_bomp_loop),
-        CALL_NATIVE(load_object_collision_model),
     END_LOOP(),
 };
 
@@ -4645,7 +4646,6 @@ const BehaviorScript bhvLargeBomp[] = {
     CALL_NATIVE(bhv_large_bomp_init),
     BEGIN_LOOP(),
         CALL_NATIVE(bhv_large_bomp_loop),
-        CALL_NATIVE(load_object_collision_model),
     END_LOOP(),
 };
 
@@ -4657,7 +4657,6 @@ const BehaviorScript bhvWfSlidingPlatform[] = {
     CALL_NATIVE(bhv_wf_sliding_platform_init),
     BEGIN_LOOP(),
         CALL_NATIVE(bhv_wf_sliding_platform_loop),
-        CALL_NATIVE(load_object_collision_model),
     END_LOOP(),
 };
 
@@ -6561,7 +6560,6 @@ const BehaviorScript bhvDDDPole[] = {
     SET_FLOAT(oDDDPoleVel, 10),
     BEGIN_LOOP(),
         CALL_NATIVE(bhv_ddd_pole_update),
-        CALL_NATIVE(bhv_pole_base_loop),
     END_LOOP(),
 };
 

@@ -5,10 +5,12 @@
 #include "game/level_update.h"
 #include "game/area.h"
 #include "game/object_helpers.h"
+#include "game/object_list_processor.h"
 #include "behavior_table.h"
 #include "object_constants.h"
 #include "object_fields.h"
 #include "model_ids.h"
+#include "pc/utils/misc.h"
 //#define DISABLE_MODULE_LOG 1
 #include "pc/debuglog.h"
 
@@ -31,11 +33,13 @@ void area_remove_sync_ids_clear(void) {
 
 void network_send_area(struct NetworkPlayer* toNp) {
     extern s16 gCurrCourseNum, gCurrActStarNum, gCurrLevelNum, gCurrAreaIndex;
+    bool levelControlTimerRunning = level_control_timer_running();
+    bool levelControlTimerVisible = (gHudDisplay.flags & HUD_DISPLAY_FLAG_TIMER) ? 1 : 0;
 
     packet_ordered_begin();
     {
         struct Packet p;
-        packet_init(&p, PACKET_AREA, true, false);
+        packet_init(&p, PACKET_AREA, true, PLMT_NONE);
 
         // level location
         packet_write(&p, &gCurrCourseNum,  sizeof(s16));
@@ -45,6 +49,13 @@ void network_send_area(struct NetworkPlayer* toNp) {
 
         // area variables
         packet_write(&p, &gNetworkAreaTimer, sizeof(u32));
+        packet_write(&p, gEnvironmentLevels, sizeof(s32));
+
+        // level control timer
+        packet_write(&p, &levelControlTimerVisible, sizeof(u8));
+        packet_write(&p, &levelControlTimerRunning, sizeof(u8));
+        packet_write(&p, &gControlTimerStartNat,    sizeof(u32));
+        packet_write(&p, &gControlTimerStopNat,     sizeof(u32));
 
         // write sync id removals
         packet_write(&p, &sRemoveSyncIdsIndex, sizeof(u8));
@@ -115,7 +126,7 @@ void network_send_area(struct NetworkPlayer* toNp) {
         }
 
         // send sync valid
-        network_send_sync_valid(toNp);
+        network_send_sync_valid(toNp, gCurrCourseNum, gCurrActStarNum, gCurrLevelNum, gCurrAreaIndex);
     }
     packet_ordered_end();
 
@@ -140,6 +151,22 @@ void network_receive_area(struct Packet* p) {
 
     // read area variables
     packet_read(p, &gNetworkAreaTimer, sizeof(u32));
+    gNetworkAreaTimerClock = clock_elapsed_ticks() - gNetworkAreaTimer;
+    packet_read(p, gEnvironmentLevels, sizeof(s32));
+
+    // read control timer variables
+    bool levelControlTimerRunning = false;
+    bool levelControlTimerVisible = false;
+    packet_read(p, &levelControlTimerVisible, sizeof(u8));
+    packet_read(p, &levelControlTimerRunning, sizeof(u8));
+    if (levelControlTimerVisible) {
+        level_control_timer(TIMER_CONTROL_SHOW);
+    }
+    if (levelControlTimerRunning) {
+        level_control_timer(TIMER_CONTROL_START);
+    }
+    packet_read(p, &gControlTimerStartNat, sizeof(u32));
+    packet_read(p, &gControlTimerStopNat,  sizeof(u32));
 
     // read removed sync ids
     area_remove_sync_ids_clear();

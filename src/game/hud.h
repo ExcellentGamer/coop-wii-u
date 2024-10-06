@@ -20,6 +20,8 @@ enum CameraHUDLut {
     GLYPH_CAM_ARROW_UP,
     GLYPH_CAM_ARROW_DOWN,
     GLYPH_CAM_LUIGI_HEAD,
+    GLYPH_CAM_TOAD_HEAD,
+    GLYPH_CAM_WALUIGI_HEAD,
 };
 
 // Functions

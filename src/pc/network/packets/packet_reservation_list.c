@@ -11,10 +11,10 @@
 #include "pc/debuglog.h"
 
 void network_send_reservation_list(struct NetworkPlayer* np, u8 syncIds[]) {
-    assert(gNetworkType == NT_SERVER);
+    SOFT_ASSERT(gNetworkType == NT_SERVER);
 
     struct Packet p;
-    packet_init(&p, PACKET_RESERVATION_LIST, true, false);
+    packet_init(&p, PACKET_RESERVATION_LIST, true, PLMT_NONE);
 
     packet_write(&p, &np->currCourseNum, sizeof(u8));
     packet_write(&p, &np->currActNum,    sizeof(u8));
@@ -30,7 +30,7 @@ void network_send_reservation_list(struct NetworkPlayer* np, u8 syncIds[]) {
 }
 
 void network_receive_reservation_list(struct Packet* p) {
-    assert(gNetworkType == NT_CLIENT);
+    SOFT_ASSERT(gNetworkType == NT_CLIENT);
     LOG_INFO("rx reservation list");
 
     u8 courseNum, actNum, levelNum, areaIndex;

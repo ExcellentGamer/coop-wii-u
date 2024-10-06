@@ -10,6 +10,7 @@
 
 #include "actors/common0.h"
 #include "actors/common1.h"
+#include "actors/custom0.h"
 #include "actors/group0.h"
 #include "actors/group1.h"
 #include "actors/group2.h"
@@ -28,6 +29,7 @@
 #include "actors/group15.h"
 #include "actors/group16.h"
 #include "actors/group17.h"
+#include "actors/zcustom0.h"
 
 #include "levels/menu/header.h"
 #include "levels/intro/header.h"
@@ -66,8 +68,6 @@ const LevelScript level_main_scripts_entry[] = {
     LOAD_RAW( /*seg*/ 0x13, _behaviorSegmentRomStart, _behaviorSegmentRomEnd),
     ALLOC_LEVEL_POOL(),
     LOAD_MODEL_FROM_GEO(MODEL_MARIO,                   mario_geo),
-    LOAD_MODEL_FROM_GEO(MODEL_LUIGI,                   luigi_geo), // custom luigi
-    LOAD_MODEL_FROM_GEO(MODEL_BUBBLE_PLAYER,           water_bomb_geo),
     LOAD_MODEL_FROM_GEO(MODEL_SMOKE,                   smoke_geo),
     LOAD_MODEL_FROM_GEO(MODEL_SPARKLES,                sparkles_geo),
     LOAD_MODEL_FROM_GEO(MODEL_BUBBLE,                  bubble_geo),
@@ -104,7 +104,6 @@ const LevelScript level_main_scripts_entry[] = {
     LOAD_MODEL_FROM_GEO(MODEL_MARIOS_WING_CAP,         marios_wing_cap_geo),
     LOAD_MODEL_FROM_GEO(MODEL_MARIOS_CAP,              marios_cap_geo),
     LOAD_MODEL_FROM_GEO(MODEL_MARIOS_CAP,              marios_cap_geo), // repeated
-    LOAD_MODEL_FROM_GEO(MODEL_LUIGIS_CAP,              luigis_cap_geo), // custom luigi_cap
     LOAD_MODEL_FROM_GEO(MODEL_BOWSER_KEY_CUTSCENE,     bowser_key_cutscene_geo),
     LOAD_MODEL_FROM_GEO(MODEL_BOWSER_KEY,              bowser_key_geo),
     LOAD_MODEL_FROM_GEO(MODEL_RED_FLAME_SHADOW,        red_flame_shadow_geo),
@@ -115,6 +114,30 @@ const LevelScript level_main_scripts_entry[] = {
     LOAD_MODEL_FROM_GEO(MODEL_EXPLOSION,               explosion_geo),
     LOAD_MODEL_FROM_GEO(MODEL_DIRT_ANIMATION,          dirt_animation_geo),
     LOAD_MODEL_FROM_GEO(MODEL_CARTOON_STAR,            cartoon_star_geo),
+
+    // CUSTOM MODELS BEGIN
+
+    LOAD_MODEL_FROM_GEO(MODEL_BUBBLE_PLAYER,           water_bomb_geo),
+
+    LOAD_MODEL_FROM_GEO(MODEL_LUIGI,                     luigi_geo),
+    LOAD_MODEL_FROM_GEO(MODEL_LUIGIS_CAP,                luigis_cap_geo),
+    LOAD_MODEL_FROM_GEO(MODEL_LUIGIS_METAL_CAP,          luigis_metal_cap_geo),
+    LOAD_MODEL_FROM_GEO(MODEL_LUIGIS_WING_CAP,           luigis_wing_cap_geo),
+    LOAD_MODEL_FROM_GEO(MODEL_LUIGIS_WINGED_METAL_CAP,   luigis_winged_metal_cap_geo),
+
+    LOAD_MODEL_FROM_GEO(MODEL_TOAD_PLAYER,               toad_player_geo),
+    LOAD_MODEL_FROM_GEO(MODEL_TOADS_CAP,                 toads_cap_geo),
+    LOAD_MODEL_FROM_GEO(MODEL_TOADS_METAL_CAP,           toads_metal_cap_geo),
+    LOAD_MODEL_FROM_GEO(MODEL_TOADS_WING_CAP,            toads_wing_cap_geo),
+
+    LOAD_MODEL_FROM_GEO(MODEL_WALUIGI,                   waluigi_geo),
+    LOAD_MODEL_FROM_GEO(MODEL_WALUIGIS_CAP,              waluigis_cap_geo),
+    LOAD_MODEL_FROM_GEO(MODEL_WALUIGIS_METAL_CAP,        waluigis_metal_cap_geo),
+    LOAD_MODEL_FROM_GEO(MODEL_WALUIGIS_WING_CAP,         waluigis_wing_cap_geo),
+    LOAD_MODEL_FROM_GEO(MODEL_WALUIGIS_WINGED_METAL_CAP, waluigis_winged_metal_cap_geo),
+
+    // CUSTOM MODELS END
+
     FREE_LEVEL_POOL(),
     CALL(/*arg*/ 0, /*func*/ lvl_init_from_save_file),
     LOOP_BEGIN(),

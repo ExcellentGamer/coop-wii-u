@@ -2,7 +2,7 @@
 #include "socket.h"
 #include "pc/configfile.h"
 #include "pc/debuglog.h"
-#include "menu/custom_menu.h"
+#include "pc/djui/djui.h"
 
 static SOCKET curSocket = INVALID_SOCKET;
 static struct sockaddr_in addr[MAX_PLAYERS] = { 0 };
@@ -86,23 +86,26 @@ static bool ns_socket_initialize(enum NetworkType networkType) {
     if (networkType == NT_CLIENT) {
         char joinText[128] = { 0 };
         snprintf(joinText, 63, "%s %d", configJoinIp, configJoinPort);
-        gOpenConnectMenu = TRUE;
+        djui_connect_menu_open();
 
         gNetworkType = NT_CLIENT;
-        network_send_join_request();
     }
 
     LOG_INFO("initialized");
+
+    if (networkType == NT_CLIENT) {
+        network_send_join_request();
+    }
 
     // success
     return true;
 }
 
-static s64 ns_socket_get_id(u8 localId) {
+static s64 ns_socket_get_id(UNUSED u8 localId) {
     return 0;
 }
 
-static void ns_socket_save_id(u8 localId, s64 networkId) {
+static void ns_socket_save_id(u8 localId, UNUSED s64 networkId) {
     assert(localId > 0);
     assert(localId < MAX_PLAYERS);
     addr[localId] = addr[0];

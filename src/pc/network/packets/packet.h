@@ -23,7 +23,7 @@ enum PacketType {
     PACKET_COLLECT_COIN,
     PACKET_COLLECT_ITEM,
     PACKET_UNUSED1,
-    PACKET_UNUSED2,
+    PACKET_DEBUG_SYNC,
     PACKET_JOIN_REQUEST,
     PACKET_JOIN,
     PACKET_CHAT,
@@ -56,6 +56,12 @@ enum PacketType {
     PACKET_CUSTOM = 255,
 };
 
+enum PacketLevelMatchType {
+    PLMT_NONE,
+    PLMT_AREA,
+    PLMT_LEVEL
+};
+
 struct Packet {
     enum PacketType packetType;
     u8 localIndex;
@@ -64,6 +70,7 @@ struct Packet {
     bool error;
     bool reliable;
     bool levelAreaMustMatch;
+    bool levelMustMatch;
     bool requestBroadcast;
     u8 destGlobalId;
     u16 seqId;
@@ -88,7 +95,7 @@ void packet_process(struct Packet* p);
 void packet_receive(struct Packet* packet);
 
 // packet_read_write.c
-void packet_init(struct Packet* packet, enum PacketType packetType, bool reliable, bool levelAreaMustMatch);
+void packet_init(struct Packet* packet, enum PacketType packetType, bool reliable, enum PacketLevelMatchType levelAreaMustMatch);
 void packet_duplicate(struct Packet* srcPacket, struct Packet* dstPacket);
 void packet_set_flags(struct Packet* packet);
 void packet_set_destination(struct Packet* packet, u8 destGlobalId);
@@ -103,6 +110,7 @@ void packet_set_ordered_data(struct Packet* packet);
 
 // packet_reliable.c
 void network_forget_all_reliable(void);
+void network_forget_all_reliable_from(u8 localIndex);
 void network_send_ack(struct Packet* p);
 void network_receive_ack(struct Packet* p);
 void network_remember_reliable(struct Packet* p);
@@ -165,11 +173,11 @@ void network_receive_join(struct Packet* p);
 
 // packet_custom.c
 u8 network_register_custom_packet(void (*send_callback)(struct Packet* p, void* params), void (*receive_callback)(struct Packet* p));
-void network_send_custom(u8 customId, bool reliable, bool levelAreaMustMatch, void* params);
+void network_send_custom(u8 customId, bool reliable, enum PacketLevelMatchType levelAreaMustMatch, void* params);
 void network_receive_custom(struct Packet* p);
 
 // packet_chat.c
-void network_send_chat(char* message, u8 rgb[3]);
+void network_send_chat(char* message, u8 globalIndex);
 void network_receive_chat(struct Packet* p);
 
 // packet_kick.c
@@ -189,7 +197,7 @@ void network_send_save_file(s32 fileIndex);
 void network_receive_save_file(struct Packet* p);
 
 // packet_save_set_flag.c
-void network_send_save_set_flag(u32 flags);
+void network_send_save_set_flag(s32 fileIndex, s32 courseIndex, u8 courseStars, u32 flags);
 void network_receive_save_set_flag(struct Packet* p);
 
 // packet_network_players.c
@@ -232,7 +240,7 @@ void network_send_area(struct NetworkPlayer* toNp);
 void network_receive_area(struct Packet* p);
 
 // packet_sync_valid.c
-void network_send_sync_valid(struct NetworkPlayer* toNp);
+void network_send_sync_valid(struct NetworkPlayer* toNp, s16 courseNum, s16 actNum, s16 levelNum, s16 areaIndex);
 void network_receive_sync_valid(struct Packet* p);
 
 // packet_level_spawn_info.c
@@ -262,5 +270,9 @@ void network_receive_reservation_use(struct Packet* p);
 // packet_reservation_release.c
 void network_send_reservation_release(u8 syncId);
 void network_receive_reservation_release(struct Packet* p);
+
+// packet_debug_sync.c
+void network_send_debug_sync(void);
+void network_receive_debug_sync(struct Packet* p);
 
 #endif

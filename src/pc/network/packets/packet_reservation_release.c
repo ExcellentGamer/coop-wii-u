@@ -11,13 +11,13 @@
 #include "pc/debuglog.h"
 
 void network_send_reservation_release(u8 syncId) {
-    assert(gNetworkType == NT_CLIENT);
+    SOFT_ASSERT(gNetworkType == NT_CLIENT);
 
     // make sure this is a reserved id
     if (syncId < RESERVED_IDS_SYNC_OBJECT_OFFSET) { return; }
 
     struct Packet p;
-    packet_init(&p, PACKET_RESERVATION_RELEASE, true, false);
+    packet_init(&p, PACKET_RESERVATION_RELEASE, true, PLMT_NONE);
 
     extern s16 gCurrCourseNum, gCurrActStarNum, gCurrLevelNum, gCurrAreaIndex;
     packet_write(&p, &gCurrCourseNum,  sizeof(u8));
@@ -32,7 +32,7 @@ void network_send_reservation_release(u8 syncId) {
 }
 
 void network_receive_reservation_release(struct Packet* p) {
-    assert(gNetworkType == NT_SERVER);
+    SOFT_ASSERT(gNetworkType == NT_SERVER);
     LOG_INFO("rx reservation release");
 
     struct NetworkPlayer* np = &gNetworkPlayers[p->localIndex];

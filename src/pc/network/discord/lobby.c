@@ -1,19 +1,46 @@
 #include "lobby.h"
 #include "activity.h"
 #include "discord_network.h"
-#include "pc/debuglog.h"
+#include "pc/logfile.h"
+#include "pc/utils/misc.h"
+
+#define MAX_LOBBY_RETRY 5
+#define MAX_LOBBY_RETRY_WAIT_TIME 6
 
 static bool isHosting = false;
 DiscordLobbyId gCurLobbyId = 0;
 
+bool gLobbyCreateRetry = false;
+u8 gLobbyCreateAttempts = 0;
+f32 gLobbyCreateAttemptElapsed = 0;
+
+void discord_lobby_update(void) {
+    if (gCurLobbyId != 0) { return; }
+    if (!gLobbyCreateRetry) { return; }
+    f32 timeUntilRetry = (clock_elapsed() - gLobbyCreateAttemptElapsed);
+    if (timeUntilRetry < MAX_LOBBY_RETRY_WAIT_TIME) { return; }
+    gLobbyCreateRetry = false;
+    discord_lobby_create();
+}
+
 static void on_lobby_create_callback(UNUSED void* data, enum EDiscordResult result, struct DiscordLobby* lobby) {
-    LOG_INFO("> on_lobby_update returned %d", (int)result);
-    LOG_INFO("Lobby id: %lld", lobby->id);
-    LOG_INFO("Lobby type: %u", lobby->type);
-    LOG_INFO("Lobby owner id: %lld", lobby->owner_id);
-    LOG_INFO("Lobby secret: %s", lobby->secret);
-    LOG_INFO("Lobby capacity: %u", lobby->capacity);
-    LOG_INFO("Lobby locked: %d", lobby->locked);
+    LOGFILE_INFO(LFT_DISCORD, "> on_lobby_create returned %d", (int)result);
+
+    if (result != DiscordResult_Ok && gLobbyCreateAttempts < MAX_LOBBY_RETRY) {
+        LOGFILE_INFO(LFT_DISCORD, "rescheduling lobby creation");
+        gLobbyCreateRetry = true;
+        gLobbyCreateAttempts++;
+        gLobbyCreateAttemptElapsed = clock_elapsed();
+        return;
+    }
+
+    DISCORD_REQUIRE(result);
+    LOGFILE_INFO(LFT_DISCORD, "Lobby id: %lld", lobby->id);
+    LOGFILE_INFO(LFT_DISCORD, "Lobby type: %u", lobby->type);
+    LOGFILE_INFO(LFT_DISCORD, "Lobby owner id: %lld", lobby->owner_id);
+    LOGFILE_INFO(LFT_DISCORD, "Lobby secret: %s", lobby->secret);
+    LOGFILE_INFO(LFT_DISCORD, "Lobby capacity: %u", lobby->capacity);
+    LOGFILE_INFO(LFT_DISCORD, "Lobby locked: %d", lobby->locked);
 
     gCurActivity.type = DiscordActivityType_Playing;
     snprintf(gCurActivity.party.id, 128, "%lld", lobby->id);
@@ -32,21 +59,21 @@ static void on_lobby_create_callback(UNUSED void* data, enum EDiscordResult resu
 }
 
 static void on_lobby_update(UNUSED void* data, int64_t lobbyId) {
-    LOG_INFO("> on_lobby_update id: %lld", lobbyId);
+    LOGFILE_INFO(LFT_DISCORD, "> on_lobby_update id: %lld", lobbyId);
 }
 
 static void on_member_connect(UNUSED void* data, int64_t lobbyId, int64_t userId) {
-    LOG_INFO("> on_member_connect lobby: %lld, user: %lld", lobbyId, userId);
+    LOGFILE_INFO(LFT_DISCORD, "> on_member_connect lobby: %lld, user: %lld", lobbyId, userId);
     gCurActivity.party.size.current_size++;
     discord_activity_update(true);
 }
 
 static void on_member_update(UNUSED void* data, int64_t lobbyId, int64_t userId) {
-    LOG_INFO("> on_member_update lobby: %lld, user: %lld", lobbyId, userId);
+    LOGFILE_INFO(LFT_DISCORD, "> on_member_update lobby: %lld, user: %lld", lobbyId, userId);
 }
 
 static void on_member_disconnect(UNUSED void* data, int64_t lobbyId, int64_t userId) {
-    LOG_INFO("> on_member_disconnect lobby: %lld, user: %lld", lobbyId, userId);
+    LOGFILE_INFO(LFT_DISCORD, "> on_member_disconnect lobby: %lld, user: %lld", lobbyId, userId);
     u8 localIndex = discord_user_id_to_local_index(userId);
     if (localIndex != UNKNOWN_LOCAL_INDEX && gNetworkPlayers[localIndex].connected) {
         network_player_disconnected(gNetworkPlayers[localIndex].globalIndex);
@@ -67,7 +94,8 @@ void discord_lobby_create(void) {
 }
 
 static void on_lobby_leave_callback(UNUSED void* data, enum EDiscordResult result) {
-    LOG_INFO("> on_lobby_leave returned %d", result);
+    LOGFILE_INFO(LFT_DISCORD, "> on_lobby_leave returned %d", result);
+    DISCORD_REQUIRE(result);
 }
 
 void discord_lobby_leave(void) {
@@ -80,7 +108,7 @@ void discord_lobby_leave(void) {
         app.lobbies->disconnect_lobby(app.lobbies, gCurLobbyId, NULL, on_lobby_leave_callback);
     }
 
-    LOG_INFO("left lobby %lld", gCurLobbyId);
+    LOGFILE_INFO(LFT_DISCORD, "left lobby %lld", gCurLobbyId);
 
     isHosting = false;
     gCurLobbyId = 0;

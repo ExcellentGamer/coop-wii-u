@@ -11,6 +11,9 @@ void djui_base_set_visible(struct DjuiBase* base, bool visible) {
 
 void djui_base_set_enabled(struct DjuiBase* base, bool enabled) {
     base->enabled = enabled;
+    if (base->interactable != NULL && base->interactable->on_enabled_change != NULL) {
+        base->interactable->on_enabled_change(base);
+    }
 }
 
 void djui_base_set_location(struct DjuiBase* base, f32 x, f32 y) {
@@ -77,6 +80,11 @@ void djui_base_set_alignment(struct DjuiBase* base, enum DjuiHAlign hAlign, enum
   /////////////
  // utility //
 /////////////
+
+static void djui_base_get_cursor_hover_location(struct DjuiBase* base, f32* x, f32* y) {
+    *x = (base->elem.x + base->elem.width  * 3.0f / 4.0f);
+    *y = (base->elem.y + base->elem.height * 3.0f / 4.0f);
+}
 
 static void djui_base_clip(struct DjuiBase* base) {
     struct DjuiBase* parent = base->parent;
@@ -159,6 +167,7 @@ void djui_base_compute(struct DjuiBase* base) {
     elem->y      = y;
     elem->width  = width;
     elem->height = height;
+
     djui_base_clip(base);
 }
 
@@ -166,12 +175,13 @@ static void djui_base_add_child(struct DjuiBase* parent, struct DjuiBase* base) 
     if (parent == NULL) { return; }
 
     // allocate linked list node
-    struct DjuiBaseChild* baseChild = malloc(sizeof(struct DjuiBaseChild));
+    struct DjuiBaseChild* baseChild = calloc(1, sizeof(struct DjuiBaseChild));
     baseChild->base = base;
     baseChild->next = NULL;
 
     // add it to the head
-    if (parent->child == NULL) {
+    if (parent->child == NULL || parent->addChildrenToHead) {
+        baseChild->next = parent->child;
         parent->child = baseChild;
         return;
     }
@@ -260,51 +270,62 @@ static void djui_base_render_border(struct DjuiBase* base) {
  // events //
 ////////////
 
-void djui_base_render(struct DjuiBase* base) {
-    if (!base->visible) { return; }
+bool djui_base_render(struct DjuiBase* base) {
+    if (!base->visible) { return false; }
 
     if (base->on_render_pre != NULL) {
         bool skipRender = false;
         base->on_render_pre(base, &skipRender);
-        if (skipRender) { return; }
+        if (skipRender) { return false; }
     }
 
     struct DjuiBaseRect* comp = &base->comp;
     struct DjuiBaseRect* clip = &base->clip;
 
     djui_base_compute(base);
-    if (comp->width  <= 0) { return; }
-    if (comp->height <= 0) { return; }
-    if (clip->width  <= 0) { return; }
-    if (clip->height <= 0) { return; }
+    if (comp->width  <= 0) { return false; }
+    if (comp->height <= 0) { return false; }
+    if (clip->width  <= 0) { return false; }
+    if (clip->height <= 0) { return false; }
 
     if (base->borderWidth.value > 0 && base->borderColor.a > 0) {
         djui_base_render_border(base);
     }
 
-    if (clip->width < 0 || clip->height <= 0) { return; }
+    if (clip->width < 0 || clip->height <= 0) { return false; }
 
     if (base->render != NULL) {
-        base->render(base);
+        if (!base->render(base)) {
+            return false;
+        }
     }
 
     djui_base_add_padding(base);
 
     // render all children
     struct DjuiBaseChild* child = base->child;
+    bool hasChildRendered = false;
     while (child != NULL) {
         struct DjuiBaseChild* nextChild = child->next;
-        djui_base_render(child->base);
-
+        bool childRendered = djui_base_render(child->base);
+        if (base->abandonAfterChildRenderFail && !childRendered && hasChildRendered) { break; }
+        hasChildRendered = hasChildRendered || childRendered;
         if (base->on_child_render != NULL) {
             base->on_child_render(base, child->base);
         }
 
         child = nextChild;
     }
+
+    return true;
 }
 
 void djui_base_destroy(struct DjuiBase* base) {
+    // remove hovered status
+    if (gDjuiHovered == base) {
+        gDjuiHovered = NULL;
+    }
+
     // remove myself from parent's linked list
     if (base->parent != NULL) {
         struct DjuiBaseChild* child     = base->parent->child;
@@ -352,13 +373,14 @@ void djui_base_destroy(struct DjuiBase* base) {
     base->destroy(base);
 }
 
-void djui_base_init(struct DjuiBase* parent, struct DjuiBase* base, void(*render)(struct DjuiBase*), void (*destroy)(struct DjuiBase*)) {
+void djui_base_init(struct DjuiBase* parent, struct DjuiBase* base, bool (*render)(struct DjuiBase*), void (*destroy)(struct DjuiBase*)) {
     memset(base, 0, sizeof(struct DjuiBase));
     base->parent = parent;
     djui_base_set_visible(base, true);
     djui_base_set_enabled(base, true);
     djui_base_set_size(base, 64, 64);
     djui_base_set_color(base, 255, 255, 255, 255);
+    base->get_cursor_hover_location = djui_base_get_cursor_hover_location;
     base->render = render;
     base->destroy = destroy;
     djui_base_add_child(parent, base);

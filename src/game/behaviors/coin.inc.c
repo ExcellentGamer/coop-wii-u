@@ -186,23 +186,13 @@ void bhv_coin_formation_loop(void) {
     s32 bitIndex;
     switch (o->oAction) {
         case 0:
-#ifndef NODRAWINGDISTANCE
-            if (o->oDistanceToMario < 2000.0f) {
-#endif
-                for (bitIndex = 0; bitIndex < 8; bitIndex++) {
-                    if (!(o->oCoinUnkF4 & (1 << bitIndex)))
-                        spawn_coin_in_formation(bitIndex, o->oBehParams2ndByte);
-                }
-                o->oAction++;
-#ifndef NODRAWINGDISTANCE
+            for (bitIndex = 0; bitIndex < 8; bitIndex++) {
+                if (!(o->oCoinUnkF4 & (1 << bitIndex)))
+                    spawn_coin_in_formation(bitIndex, o->oBehParams2ndByte);
             }
-#endif
+            o->oAction++;
             break;
         case 1:
-#ifndef NODRAWINGDISTANCE
-            if (o->oDistanceToMario > 2100.0f)
-                o->oAction++;
-#endif
             break;
         case 2:
             o->oAction = 0;
@@ -240,6 +230,11 @@ void coin_inside_boo_act_0(void) {
         cur_obj_set_model(MODEL_BLUE_COIN);
         cur_obj_scale(0.7);
     }
+    if (parent == NULL || (parent->behavior != bhvGhostHuntBoo && parent->behavior != bhvBoo)) {
+        o->parentObj = NULL;
+        obj_mark_for_deletion(o);
+        return;
+    }
     obj_copy_pos(o, parent);
     if (parent->oBooDeathStatus == BOO_DEATH_STATUS_DYING) {
         o->oAction = 1;
@@ -248,6 +243,7 @@ void coin_inside_boo_act_0(void) {
         o->oVelX = sins(sp26) * sp20;
         o->oVelZ = coss(sp26) * sp20;
         o->oVelY = 35.0f;
+        o->parentObj = NULL;
     }
 }
 

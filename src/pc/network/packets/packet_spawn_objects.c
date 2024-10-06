@@ -4,6 +4,7 @@
 #include "object_fields.h"
 #include "object_constants.h"
 #include "src/game/object_helpers.h"
+#include "src/game/area.h"
 #include "behavior_data.h"
 #include "behavior_table.h"
 //#define DISABLE_MODULE_LOG 1
@@ -18,6 +19,7 @@ struct SpawnObjectData {
     u16 behaviorId;
     s16 activeFlags;
     s32 rawData[80];
+    u8 globalPlayerIndex;
 };
 
 static u8 generate_parent_id(struct Object* objects[], u8 onIndex, bool sanitize) {
@@ -30,7 +32,7 @@ static u8 generate_parent_id(struct Object* objects[], u8 onIndex, bool sanitize
         if (sanitize && o->parentObj->oSyncID == 0) {
             return (u8)-1;
         }
-        assert(o->parentObj->oSyncID != 0);
+        SOFT_ASSERT_RETURN(o->parentObj->oSyncID != 0, (u8)-1);
         return (u8)o->parentObj->oSyncID;
     }
 
@@ -38,7 +40,7 @@ static u8 generate_parent_id(struct Object* objects[], u8 onIndex, bool sanitize
         if (o->parentObj == objects[i]) { return i; }
     }
 
-    assert(false);
+    SOFT_ASSERT_RETURN(false, (u8)-1);
 }
 
 void network_send_spawn_objects(struct Object* objects[], u32 models[], u8 objectCount) {
@@ -46,11 +48,13 @@ void network_send_spawn_objects(struct Object* objects[], u32 models[], u8 objec
 }
 
 void network_send_spawn_objects_to(u8 sendToLocalIndex, struct Object* objects[], u32 models[], u8 objectCount) {
-    assert(objectCount < MAX_SPAWN_OBJECTS_PER_PACKET);
-    if (sendToLocalIndex == gNetworkPlayerLocal->localIndex) { return; }
+    if (gNetworkPlayerLocal == NULL || !gNetworkPlayerLocal->currAreaSyncValid) { return; }
+    SOFT_ASSERT(objectCount < MAX_SPAWN_OBJECTS_PER_PACKET);
+    // prevent sending spawn objects during credits
+    if (gCurrActStarNum == 99) { return; }
 
     struct Packet p;
-    packet_init(&p, PACKET_SPAWN_OBJECTS, true, true);
+    packet_init(&p, PACKET_SPAWN_OBJECTS, true, PLMT_AREA);
 
     // objects
     packet_write(&p, &objectCount, sizeof(u8));
@@ -68,6 +72,7 @@ void network_send_spawn_objects_to(u8 sendToLocalIndex, struct Object* objects[]
         packet_write(&p, &o->header.gfx.scale[0], sizeof(f32));
         packet_write(&p, &o->header.gfx.scale[1], sizeof(f32));
         packet_write(&p, &o->header.gfx.scale[2], sizeof(f32));
+        packet_write(&p, &o->globalPlayerIndex, sizeof(u8));
     }
 
     if (sendToLocalIndex == PACKET_DESTINATION_BROADCAST) {
@@ -81,6 +86,8 @@ void network_send_spawn_objects_to(u8 sendToLocalIndex, struct Object* objects[]
 
 void network_receive_spawn_objects(struct Packet* p) {
     LOG_INFO("rx spawn objects");
+    // prevent receiving spawn objects during credits
+    if (gCurrActStarNum == 99) { return; }
 
     u8 objectCount = 0;
     packet_read(p, &objectCount, sizeof(u8));
@@ -97,6 +104,7 @@ void network_receive_spawn_objects(struct Packet* p) {
         packet_read(p, &scale[0], sizeof(f32));
         packet_read(p, &scale[1], sizeof(f32));
         packet_read(p, &scale[2], sizeof(f32));
+        packet_read(p, &data.globalPlayerIndex, sizeof(u8));
 
         struct Object* parentObj = NULL;
         if (data.parentId == (u8)-1) {
@@ -123,6 +131,7 @@ void network_receive_spawn_objects(struct Packet* p) {
 
         void* behavior = (void*)get_behavior_from_id(data.behaviorId);
         struct Object* o = spawn_object(parentObj, data.model, behavior);
+        o->globalPlayerIndex = data.globalPlayerIndex;
         o->createdThroughNetwork = true;
         memcpy(o->rawData.asU32, data.rawData, sizeof(u32) * 80);
 

@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include "../network.h"
-#include "menu/custom_menu_system.h"
 #include "pc/debuglog.h"
+#include "pc/djui/djui.h"
 
 void network_send_kick(enum KickReasonType kickReason) {
     u8 kickReasonType = kickReason;
     struct Packet p;
-    packet_init(&p, PACKET_KICK, false, false);
+    packet_init(&p, PACKET_KICK, false, PLMT_NONE);
     packet_write(&p, &kickReasonType, sizeof(u8));
     network_send_to(0, &p);
 }
@@ -27,8 +27,8 @@ void network_receive_kick(struct Packet* p) {
     enum KickReasonType kickReason = kickReasonType;
 
     switch (kickReason) {
-        case EKT_FULL_PARTY: custom_menu_error("The party is full.");              break;
-        default:             custom_menu_error("Host has closed the connection."); break;
+        case EKT_FULL_PARTY: djui_panel_join_message_error("\\#ffa0a0\\Error:\\#c8c8c8\\ The party is full.");              break;
+        default:             djui_panel_join_message_error("\\#ffa0a0\\Error:\\#c8c8c8\\ Host has closed the connection."); break;
     }
-    network_shutdown();
+    network_shutdown(false);
 }

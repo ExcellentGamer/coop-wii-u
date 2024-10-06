@@ -9,7 +9,10 @@
 #include "src/game/memory.h"
 #include "src/game/object_helpers.h"
 #include "src/game/obj_behaviors.h"
+#include "src/game/object_list_processor.h"
+#include "src/game/area.h"
 #include "pc/debuglog.h"
+#include "pc/utils/misc.h"
 
 struct SyncObject gSyncObjects[MAX_SYNC_OBJECTS] = { 0 };
 struct Packet sLastSyncEntReliablePacket[MAX_SYNC_OBJECTS] = { 0 };
@@ -26,6 +29,42 @@ void forget_ent_reliable_packet(struct Object* o) {
     }
 }
 
+struct DelayedPacketObject {
+    struct Packet p;
+    struct DelayedPacketObject* next;
+};
+
+struct DelayedPacketObject* delayedPacketObjectHead = NULL;
+struct DelayedPacketObject* delayedPacketObjectTail = NULL;
+
+void network_delayed_packet_object_remember(struct Packet* p) {
+    struct DelayedPacketObject* node = malloc(sizeof(struct DelayedPacketObject));
+    packet_duplicate(p, &node->p);
+    node->next = NULL;
+    LOG_INFO("saving delayed object");
+
+    if (delayedPacketObjectHead == NULL) {
+        delayedPacketObjectHead = node;
+        delayedPacketObjectTail = node;
+    } else {
+        delayedPacketObjectTail->next = node;
+        delayedPacketObjectTail = node;
+    }
+}
+
+void network_delayed_packet_object_execute(void) {
+    struct DelayedPacketObject* node = delayedPacketObjectHead;
+    while (node != NULL) {
+        struct DelayedPacketObject* next = node->next;
+        LOG_INFO("executing delayed object");
+        network_receive_object(&node->p);
+        free(node);
+        node = next;
+    }
+    delayedPacketObjectHead = NULL;
+    delayedPacketObjectTail = NULL;
+}
+
 // todo: move this to somewhere more general
 static float player_distance(struct MarioState* marioState, struct Object* o) {
     if (marioState->marioObj == NULL) { return 0; }
@@ -39,6 +78,9 @@ static float player_distance(struct MarioState* marioState, struct Object* o) {
 }
 
 static bool should_own_object(struct SyncObject* so) {
+    // always own objects in credit sequence
+    if (gCurrActStarNum == 99) { return true; }
+
     // check for override
     u8 shouldOverride = FALSE;
     u8 shouldOwn = FALSE;
@@ -57,7 +99,7 @@ static bool should_own_object(struct SyncObject* so) {
     }
     if (so->o->oHeldState == HELD_HELD && so->o->heldByPlayerIndex == 0) { return true; }
     for (int i = 0; i < MAX_PLAYERS; i++) {
-        if (!is_player_active(&gMarioStates[i])) { continue; }
+        if (i != 0 && !is_player_active(&gMarioStates[i])) { continue; }
         if (player_distance(&gMarioStates[0], so->o) > player_distance(&gMarioStates[i], so->o)) { return false; }
     }
     if (so->o->oHeldState == HELD_HELD && so->o->heldByPlayerIndex != 0) { return false; }
@@ -69,9 +111,6 @@ void network_override_object(u8 syncId, struct Object* o) {
 }
 
 struct SyncObject* network_init_object(struct Object *o, float maxSyncDistance) {
-    // HACK: an odd way to detect if this entity was spawned from a staticLevel respawner
-    bool wasStaticRespawner = (o->oSyncID != 0 && gSyncObjects[o->oSyncID].o == o && o->oSyncID < RESERVED_IDS_SYNC_OBJECT_OFFSET);
-
     // generate new sync ID
     network_set_sync_id(o);
 
@@ -80,7 +119,7 @@ struct SyncObject* network_init_object(struct Object *o, float maxSyncDistance) 
     so->o = o;
     so->maxSyncDistance = maxSyncDistance;
     so->owned = false;
-    so->clockSinceUpdate = clock();
+    so->clockSinceUpdate = clock_elapsed();
     so->extraFieldCount = 0;
     so->behavior = (BehaviorScript*)o->behavior;
     for (int i = 0; i < MAX_PLAYERS; i++) {
@@ -94,7 +133,10 @@ struct SyncObject* network_init_object(struct Object *o, float maxSyncDistance) 
     so->ignore_if_true = NULL;
     so->on_received_pre = NULL;
     so->on_received_post = NULL;
+    so->on_sent_pre = NULL;
+    so->on_sent_post = NULL;
     so->override_ownership = NULL;
+    so->on_forget = NULL;
     so->syncDeathEvent = true;
     so->randomSeed = (u16)(o->oSyncID * 7951);
     memset(so->extraFields, 0, sizeof(void*) * MAX_SYNC_OBJECT_FIELDS);
@@ -105,7 +147,7 @@ struct SyncObject* network_init_object(struct Object *o, float maxSyncDistance) 
 }
 
 void network_init_object_field(struct Object *o, void* field) {
-    assert(o->oSyncID != 0);
+    SOFT_ASSERT(o->oSyncID != 0);
     // remember to synchronize this extra field
     struct SyncObject* so = &gSyncObjects[o->oSyncID];
     u8 index = so->extraFieldCount++;
@@ -145,26 +187,50 @@ void network_clear_sync_objects(void) {
     }
 }
 
+u8 network_find_cached_sync_id(struct Object* o) {
+    u8 behaviorId = get_id_from_behavior(o->behavior);
+    for (int i = 1; i < 256; i++) {
+        if (gSyncObjects[i].o != NULL) { continue; }
+        u8 cachedBehaviorId = gCurrentArea->cachedBehaviors[i];
+        if (cachedBehaviorId != behaviorId) { continue; }
+
+        f32 dist = dist_between_object_and_point(o, gCurrentArea->cachedPositions[i][0], gCurrentArea->cachedPositions[i][1], gCurrentArea->cachedPositions[i][2]);
+        if (dist > 1) { continue; }
+        //LOG_INFO("get cached sync id for %02X: %d", behaviorId, i);
+        return i;
+    }
+    return 0;
+}
+
 void network_set_sync_id(struct Object* o) {
     if (o->oSyncID != 0) { return; }
 
     u8 syncId = 0;
     if (!gNetworkAreaLoaded) {
-        // while loading, just fill in sync ids from 1 to MAX_SYNC_OBJECTS
-        for (int i = 1; i < MAX_SYNC_OBJECTS; i++) {
-            sNextSyncId++;
-            sNextSyncId = sNextSyncId % RESERVED_IDS_SYNC_OBJECT_OFFSET;
-            if (gSyncObjects[sNextSyncId].o != NULL) { continue; }
-            syncId = sNextSyncId;
-            break;
+        syncId = network_find_cached_sync_id(o);
+        if (syncId == 0) {
+            // while loading, just fill in sync ids from 1 to MAX_SYNC_OBJECTS
+            for (int i = 1; i < MAX_SYNC_OBJECTS; i++) {
+                sNextSyncId++;
+                sNextSyncId = sNextSyncId % RESERVED_IDS_SYNC_OBJECT_OFFSET;
+                if (gSyncObjects[sNextSyncId].o != NULL) { continue; }
+                syncId = sNextSyncId;
+                break;
+            }
+            // cache this object's id
+            gCurrentArea->cachedBehaviors[syncId] = get_id_from_behavior(o->behavior);
+            gCurrentArea->cachedPositions[syncId][0] = o->oPosX;
+            gCurrentArea->cachedPositions[syncId][1] = o->oPosY;
+            gCurrentArea->cachedPositions[syncId][2] = o->oPosZ;
+            //LOG_INFO("set cached sync id for %02X: %d", gCurrentArea->cachedBehaviors[syncId], syncId);
         }
     } else {
         // no longer loading, require reserved id
         syncId = reservation_area_local_grab_id();
     }
 
-    assert(syncId != 0);
-    assert(gSyncObjects[syncId].o == NULL);
+    SOFT_ASSERT(syncId != 0);
+    SOFT_ASSERT(gSyncObjects[syncId].o == NULL);
 
     o->oSyncID = syncId;
 
@@ -172,7 +238,7 @@ void network_set_sync_id(struct Object* o) {
         LOG_INFO("set sync id for object w/behavior %d", get_id_from_behavior(o->behavior));
     }
 
-    assert(o->oSyncID < MAX_SYNC_OBJECTS);
+    SOFT_ASSERT(o->oSyncID < MAX_SYNC_OBJECTS);
 }
 
 // ----- header ----- //
@@ -235,7 +301,7 @@ static struct SyncObject* packet_read_object_header(struct Packet* p, u8* fromLo
         return NULL;
     }
     gCurrentObject = tmp;
-    so->clockSinceUpdate = clock();
+    so->clockSinceUpdate = clock_elapsed();
 
     // make sure this is the newest event possible
     u16 eventId = 0;
@@ -337,7 +403,7 @@ static void packet_write_object_extra_fields(struct Packet* p, struct Object* o)
 
     // write the extra field
     for (u8 i = 0; i < so->extraFieldCount; i++) {
-        assert(so->extraFields[i] != NULL);
+        SOFT_ASSERT(so->extraFields[i] != NULL);
         packet_write(p, so->extraFields[i], sizeof(u32));
     }
 }
@@ -355,7 +421,7 @@ static void packet_read_object_extra_fields(struct Packet* p, struct Object* o) 
 
     // read the extra fields
     for (u8 i = 0; i < extraFieldsCount; i++) {
-        assert(so->extraFields[i] != NULL);
+        SOFT_ASSERT(so->extraFields[i] != NULL);
         packet_read(p, so->extraFields[i], sizeof(u32));
     }
 }
@@ -383,6 +449,8 @@ static void packet_read_object_only_death(struct Packet* p, struct Object* o) {
 // ----- main send/receive ----- //
 
 void network_send_object(struct Object* o) {
+    if (gNetworkType == NT_NONE || gNetworkPlayerLocal == NULL) { return; }
+
     // sanity check SyncObject
     if (!network_sync_object_initialized(o)) { return; }
     if (o->behavior == bhvRespawner) { return; }
@@ -404,6 +472,9 @@ void network_send_object(struct Object* o) {
 }
 
 void network_send_object_reliability(struct Object* o, bool reliable) {
+    if (gNetworkPlayerLocal == NULL || !gNetworkPlayerLocal->currAreaSyncValid) { return; }
+    // prevent sending objects during credits sequence
+    if (gCurrActStarNum == 99) { return; }
     // sanity check SyncObject
     if (!network_sync_object_initialized(o)) { return; }
     u8 syncId = o->oSyncID;
@@ -419,13 +490,22 @@ void network_send_object_reliability(struct Object* o, bool reliable) {
         return;
     }
 
+    // trigger on_sent_pre callback
+    if (so->on_sent_pre != NULL) {
+        extern struct Object* gCurrentObject;
+        struct Object* tmp = gCurrentObject;
+        gCurrentObject = so->o;
+        so->on_sent_pre();
+        gCurrentObject = tmp;
+    }
+
     // always send a new event ID
     so->txEventId++;
-    so->clockSinceUpdate = clock();
+    so->clockSinceUpdate = clock_elapsed();
 
     // write the packet data
     struct Packet p;
-    packet_init(&p, PACKET_OBJECT, reliable, true);
+    packet_init(&p, PACKET_OBJECT, reliable, PLMT_AREA);
     packet_write_object_header(&p, o);
     packet_write_object_full_sync(&p, o);
     packet_write_object_standard_fields(&p, o);
@@ -447,9 +527,27 @@ void network_send_object_reliability(struct Object* o, bool reliable) {
 
     // send the packet out
     network_send(&p);
+
+    // trigger on_sent_post callback
+    if (so->on_sent_post != NULL) {
+        extern struct Object* gCurrentObject;
+        struct Object* tmp = gCurrentObject;
+        gCurrentObject = so->o;
+        so->on_sent_post();
+        gCurrentObject = tmp;
+    }
 }
 
 void network_receive_object(struct Packet* p) {
+    // prevent receiving objects during credits sequence
+    if (gCurrActStarNum == 99) { return; }
+
+    // delay any objects received while we're loading the area
+    if (!gNetworkAreaLoaded) {
+        network_delayed_packet_object_remember(p);
+        return;
+    }
+
     // read the header and sanity check the packet
     u8 fromLocalIndex = 0;
     struct SyncObject* so = packet_read_object_header(p, &fromLocalIndex);
@@ -524,12 +622,31 @@ void network_forget_sync_object(struct SyncObject* so) {
         area_remove_sync_ids_add(syncId);
     }
 
+    if (so->on_forget != NULL) {
+        struct Object* lastObject = gCurrentObject;
+        gCurrentObject = so->o;
+        so->on_forget();
+        gCurrentObject = lastObject;
+    }
+
     so->o = NULL;
     so->behavior = NULL;
     so->owned = false;
 }
 
 void network_update_objects(void) {
+    if (gNetworkAreaLoaded && delayedPacketObjectHead != NULL) {
+        network_delayed_packet_object_execute();
+    }
+
+#ifdef DEVELOPMENT
+    static f32 lastDebugSync = 0;
+    if (clock_elapsed() - lastDebugSync >= 1) {
+        network_send_debug_sync();
+        lastDebugSync = clock_elapsed();
+    }
+#endif
+
     for (u32 i = 1; i < MAX_SYNC_OBJECTS; i++) {
         struct SyncObject* so = &gSyncObjects[i];
         if (so->o == NULL) { continue; }
@@ -563,11 +680,14 @@ void network_update_objects(void) {
         if (updateRate < so->minUpdateRate) { updateRate = so->minUpdateRate; }
 
         // see if we should update
-        float timeSinceUpdate = ((float)clock() - (float)so->clockSinceUpdate) / (float)CLOCKS_PER_SEC;
+        float timeSinceUpdate = (clock_elapsed() - so->clockSinceUpdate);
         if (timeSinceUpdate < updateRate) { continue; }
 
         // update!
-        network_send_object(gSyncObjects[i].o);
+        bool inCredits = (gCurrActStarNum == 99);
+        if (network_player_any_connected() && !inCredits) {
+            network_send_object(gSyncObjects[i].o);
+        }
     }
 
 }

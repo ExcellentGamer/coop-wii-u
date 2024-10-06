@@ -94,8 +94,11 @@ void bhv_lll_bowser_puzzle_spawn_piece(s16 model, const BehaviorScript *behavior
     puzzlePiece->oAction = initialAction; // This action never gets executed.
     puzzlePiece->oBowserPuzzlePieceActionList = actionList;
     puzzlePiece->oBowserPuzzlePieceNextAction = actionList;
-    puzzlePiece->oBowserPuzzlePieceTimer = 0;
     puzzlePiece->oTimer = 0;
+    puzzlePiece->areaTimerType = AREA_TIMER_TYPE_LOOP;
+    puzzlePiece->areaTimer = 0;
+    puzzlePiece->areaTimerDuration = 650;
+    puzzlePiece->areaTimerRunOnceCallback = load_object_collision_model;
 }
 
 /**
@@ -259,27 +262,11 @@ void (*sBowserPuzzlePieceActions[])(void) = {
 };
 
 void bhv_lll_bowser_puzzle_piece_loop(void) {
-    // make sure we're loaded and synchronized
-    if (!gNetworkAreaLoaded) {
-        o->oTimer = 0;
-        return;
-    } else if (o->oBowserPuzzlePieceTimer == 0 && (gNetworkAreaTimer - o->oBowserPuzzlePieceTimer) >= 650) {
-        o->oBowserPuzzlePieceTimer = ((gNetworkAreaTimer - o->oBowserPuzzlePieceTimer) / 650) * 650;
-        o->oTimer = 0;
-    }
+    bhv_lll_bowser_puzzle_piece_update();
 
-    while (o->oBowserPuzzlePieceTimer < gNetworkAreaTimer) {
-        bhv_lll_bowser_puzzle_piece_update();
+    cur_obj_call_action_function(sBowserPuzzlePieceActions);
 
-        cur_obj_call_action_function(sBowserPuzzlePieceActions);
-
-        o->oPosX = o->oBowserPuzzlePieceOffsetX + o->oHomeX;
-        o->oPosY = o->oBowserPuzzlePieceOffsetY + o->oHomeY;
-        o->oPosZ = o->oBowserPuzzlePieceOffsetZ + o->oHomeZ;
-
-        o->oBowserPuzzlePieceTimer++;
-        if (o->oBowserPuzzlePieceTimer < gNetworkAreaTimer) {
-            cur_obj_fake_update();
-        }
-    }
+    o->oPosX = o->oBowserPuzzlePieceOffsetX + o->oHomeX;
+    o->oPosY = o->oBowserPuzzlePieceOffsetY + o->oHomeY;
+    o->oPosZ = o->oBowserPuzzlePieceOffsetZ + o->oHomeZ;
 }

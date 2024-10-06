@@ -44,6 +44,7 @@
 #include "save_file.h"
 #include "seq_ids.h"
 #include "spawn_sound.h"
+#include "engine/surface_load.h"
 #include "pc/network/network.h"
 #include "pc/network/reservation_area.h"
 
@@ -511,6 +512,7 @@ static s32 obj_grow_then_shrink(f32 *scaleVel, f32 shootFireScale, f32 endScale)
 
 static s32 oscillate_toward(s32 *value, f32 *vel, s32 target, f32 velCloseToZero, f32 accel,
                             f32 slowdown) {
+    if (value == NULL || vel == NULL) { return FALSE; }
     s32 startValue = *value;
     *value += (s32) *vel;
 

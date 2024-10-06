@@ -78,11 +78,11 @@ static void klepto_anim_dive(void) {
 
 static s32 kleptoCachedAnimState = 0;
 
-static void bhv_klepto_on_received_pre(u8 localIndex) {
+static void bhv_klepto_on_received_pre(UNUSED u8 localIndex) {
     kleptoCachedAnimState = o->oAnimState;
 }
 
-static void bhv_klepto_on_received_post(u8 localIndex) {
+static void bhv_klepto_on_received_post(UNUSED u8 localIndex) {
     if (kleptoCachedAnimState == KLEPTO_ANIM_STATE_HOLDING_NOTHING && o->oAnimState == KLEPTO_ANIM_STATE_HOLDING_STAR) {
         o->oAnimState = KLEPTO_ANIM_STATE_HOLDING_NOTHING;
     }
@@ -122,6 +122,7 @@ void bhv_klepto_init(void) {
     network_init_object_field(o, &o->oHomeZ);
     network_init_object_field(o, &o->oMoveAnglePitch);
     network_init_object_field(o, &o->oGravity);
+    network_init_object_field(o, &o->globalPlayerIndex);
 }
 
 static void klepto_change_target(void) {
@@ -290,8 +291,9 @@ static void klepto_act_dive_at_mario(void) {
             if (marioState->action != ACT_SLEEPING
                 && !(marioState->action & (ACT_FLAG_SHORT_HITBOX | ACT_FLAG_BUTT_OR_STOMACH_SLIDE))
                 && distanceToPlayer < 200.0f && dy > 50.0f && dy < 90.0f) {
-                if (network_owns_object(o) && mario_lose_cap_to_enemy(marioState, 1)) {
-                    o->oAnimState = marioState->character->capKleptoAnimState;
+                if (network_owns_object(o) && mario_lose_cap_to_enemy(marioState, 1) && marioState->playerIndex == 0) {
+                    o->oAnimState = KLEPTO_ANIM_STATE_HOLDING_CAP;
+                    o->globalPlayerIndex = gNetworkPlayers[marioState->playerIndex].globalIndex;
                     network_send_object(o);
                 }
             }
@@ -371,7 +373,6 @@ void obj_set_speed_to_zero(void) {
 void bhv_klepto_update(void) {
     struct MarioState* marioState = nearest_mario_state_to_object(o);
     struct Object* player = marioState->marioObj;
-    int distanceToPlayer = dist_between_objects(o, player);
     int angleToPlayer = obj_angle_to_object(o, player);
 
     UNUSED s32 unused;
@@ -414,19 +415,18 @@ void bhv_klepto_update(void) {
         if (obj_handle_attacks(&sKleptoHitbox, o->oAction, sKleptoAttackHandlers)) {
             cur_obj_play_sound_2(SOUND_OBJ_KLEPTO2);
 
-            u8 kleptoHoldingCap = FALSE;
-            u32 capModel = MODEL_MARIOS_CAP;
-            for (int i = 0; i < CT_MAX; i++) {
-                if (o->oAnimState == gCharacters[i].capKleptoAnimState) {
-                    kleptoHoldingCap = TRUE;
-                    capModel = gCharacters[i].capModelId;
-                }
-            }
+            u8 kleptoHoldingCap = (o->oAnimState == KLEPTO_ANIM_STATE_HOLDING_CAP);
 
             if (network_owns_object(o) && kleptoHoldingCap) {
+                struct NetworkPlayer* np = network_player_from_global_index(o->globalPlayerIndex);
+                if (np == NULL) { np = gNetworkPlayerLocal; }
+                u8 modelIndex = (np->modelIndex < CT_MAX) ? np->modelIndex : 0;
+                u32 capModel = gCharacters[modelIndex].capModelId;
+
                 save_file_clear_flags(SAVE_FLAG_CAP_ON_KLEPTO);
 
                 struct Object* cap = spawn_object(o, capModel, bhvNormalCap);
+                cap->globalPlayerIndex = o->globalPlayerIndex;
 
                 struct Object* spawn_objects[] = { cap };
                 u32 models[] = { capModel };

@@ -310,7 +310,6 @@
 #define /*0x108*/ oBowserPuzzlePieceContinuePerformingAction OBJECT_FIELD_S32(0x20)
 #define /*0x10C*/ oBowserPuzzlePieceActionList               OBJECT_FIELD_VPTR(0x21)
 #define /*0x110*/ oBowserPuzzlePieceNextAction               OBJECT_FIELD_VPTR(0x22)
-#define /*0x0F4*/ oBowserPuzzlePieceTimer                    OBJECT_FIELD_U32(0x1B)
 
 /* Bubba */
 #define /*0x0F4*/ oBubbaUnkF4  OBJECT_FIELD_F32(0x1B)
@@ -376,7 +375,6 @@
 #define /*0x0F8*/ oCheckerBoardPlatformUnkF8  OBJECT_FIELD_S32(0x1C) // oAction like
 #define /*0x0FC*/ oCheckerBoardPlatformUnkFC  OBJECT_FIELD_S32(0x1D)
 #define /*0x1AC*/ oCheckerBoardPlatformUnk1AC OBJECT_FIELD_F32(0x49)
-#define /*0x1B0*/ oCheckerBoardPlatformTimer  OBJECT_FIELD_U32(0x4A)
 
 /* Cheep Cheep */
 #define /*0x0F4*/ oCheepCheepUnkF4  OBJECT_FIELD_F32(0x1B)
@@ -483,7 +481,8 @@
 #define /*0x0F4*/ oFallingPillarPitchAcceleration OBJECT_FIELD_F32(0x1B)
 
 /* Fire Spitter */
-#define /*0x0F4*/ oFireSpitterScaleVel OBJECT_FIELD_F32(0x1B)
+#define /*0x0F4*/ oFireSpitterScaleVel   OBJECT_FIELD_F32(0x1B)
+#define /*0x0F8*/ oFireSpitterLastWaterY OBJECT_FIELD_F32(0x1C)
 
 /* Blue Fish */
 #define /*0x0F4*/ oBlueFishRandomVel   OBJECT_FIELD_F32(0x1B)
@@ -829,7 +828,6 @@
 #define /*0x0F4*/ oDDDPoleVel       OBJECT_FIELD_F32(0x1B)
 #define /*0x0F8*/ oDDDPoleMaxOffset OBJECT_FIELD_F32(0x1C)
 #define /*0x0FC*/ oDDDPoleOffset    OBJECT_FIELD_F32(0x1D)
-#define /*0x100*/ oDDDPoleTimer     OBJECT_FIELD_U32(0x1E)
 
 /* Pyramid Top */
 #define /*0x0F4*/ oPyramidTopPillarsTouched OBJECT_FIELD_S32(0x1B)
@@ -870,6 +868,7 @@
 #define /*0x0F8*/ oSkeeterUnkF8       OBJECT_FIELD_S32(0x1C)
 #define /*0x0FC*/ oSkeeterUnkFC       OBJECT_FIELD_F32(0x1D)
 #define /*0x100*/ oSkeeterWaitTime    OBJECT_FIELD_S32(0x1E)
+#define /*0x0F8*/ oSkeeterLastWaterY  OBJECT_FIELD_F32(0x1F)
 #define /*0x1AC*/ oSkeeterUnk1AC      OBJECT_FIELD_S16(0x49, 0)
 
 /* Jrb Sliding Box */

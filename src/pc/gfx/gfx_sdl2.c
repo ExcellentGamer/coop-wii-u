@@ -35,12 +35,17 @@
 
 #include "src/pc/controller/controller_keyboard.h"
 
+#include "pc/utils/misc.h"
+
 // TODO: figure out if this shit even works
 #ifdef VERSION_EU
 # define FRAMERATE 25
 #else
 # define FRAMERATE 30
 #endif
+// time between consequtive game frames
+static const f64 sFrameTime = 1.0 / ((double)FRAMERATE);
+static f64 sFrameTargetTime = 0;
 
 static SDL_Window *wnd;
 static SDL_GLContext ctx = NULL;
@@ -50,11 +55,6 @@ static kb_callback_t kb_key_down = NULL;
 static kb_callback_t kb_key_up = NULL;
 static void (*kb_all_keys_up)(void) = NULL;
 static void (*kb_text_input)(char*) = NULL;
-
-// whether to use timer for frame control
-static bool use_timer = true;
-// time between consequtive game frames
-static const int frame_time = 1000 / (2 * FRAMERATE);
 
 const SDL_Scancode windows_scancode_table[] = {
   /*  0                        1                            2                         3                            4                     5                            6                            7  */
@@ -140,26 +140,7 @@ int test_vsync(void) {
 }
 
 static inline void gfx_sdl_set_vsync(const bool enabled) {
-    if (enabled) {
-        // try to detect refresh rate
-        SDL_GL_SetSwapInterval(1);
-        int vblanks = test_vsync();
-        if (vblanks & 1)
-            vblanks = 0; // not divisible by 60, fuck that
-        else
-            vblanks /= 2;
-        if (vblanks) {
-            printf("determined swap interval: %d\n", vblanks);
-            SDL_GL_SetSwapInterval(vblanks);
-            use_timer = false;
-            return;
-        } else {
-            printf("could not determine swap interval, falling back to timer sync\n");
-        }
-    }
-
-    use_timer = true;
-    SDL_GL_SetSwapInterval(0);
+    SDL_GL_SetSwapInterval(enabled);
 }
 
 static void gfx_sdl_set_fullscreen(void) {
@@ -169,10 +150,8 @@ static void gfx_sdl_set_fullscreen(void) {
         return;
     if (configWindow.fullscreen) {
         SDL_SetWindowFullscreen(wnd, SDL_WINDOW_FULLSCREEN_DESKTOP);
-        SDL_ShowCursor(SDL_DISABLE);
     } else {
         SDL_SetWindowFullscreen(wnd, 0);
-        SDL_ShowCursor(SDL_ENABLE);
         configWindow.exiting_fullscreen = true;
     }
 }
@@ -228,6 +207,9 @@ static void gfx_sdl_init(const char *window_title) {
     gfx_sdl_set_vsync(configWindow.vsync);
 
     gfx_sdl_set_fullscreen();
+    if (configWindow.fullscreen) {
+        SDL_ShowCursor(SDL_DISABLE);
+    }
 
     for (size_t i = 0; i < sizeof(windows_scancode_table) / sizeof(SDL_Scancode); i++) {
         inverted_scancode_table[windows_scancode_table[i]] = i;
@@ -333,21 +315,32 @@ static void gfx_sdl_set_keyboard_callbacks(kb_callback_t on_key_down, kb_callbac
 }
 
 static bool gfx_sdl_start_frame(void) {
+    f64 curTime = clock_elapsed_f64();
+    f64 frameTime = config60Fps ? (sFrameTime / 2.0) : sFrameTime;
+    if (curTime > sFrameTargetTime) {
+        sFrameTargetTime += frameTime;
+        if (curTime > sFrameTargetTime + frameTime * 3) {
+            sFrameTargetTime = curTime;
+        }
+        return false;
+    }
     return true;
 }
 
 static inline void sync_framerate_with_timer(void) {
-    static Uint32 last_time = 0;
-    // get base timestamp on the first frame (might be different from 0)
-    if (last_time == 0) last_time = SDL_GetTicks();
-    const int elapsed = SDL_GetTicks() - last_time;
-    if (elapsed < frame_time)
-        SDL_Delay(frame_time - elapsed);
-    last_time += frame_time;
+    f64 curTime = clock_elapsed_f64();
+    if (curTime < sFrameTargetTime) {
+        u32 delayMs = (sFrameTargetTime - curTime) * 1000.0;
+        if (delayMs > 0) {
+            SDL_Delay(delayMs);
+        }
+    }
+    f64 frameTime = config60Fps ? (sFrameTime / 2.0) : sFrameTime;
+    sFrameTargetTime += frameTime;
 }
 
 static void gfx_sdl_swap_buffers_begin(void) {
-    if (use_timer) sync_framerate_with_timer();
+    sync_framerate_with_timer();
     SDL_GL_SwapWindow(wnd);
 }
 
@@ -370,6 +363,8 @@ static void gfx_sdl_shutdown(void) {
 static void gfx_sdl_start_text_input(void) { SDL_StartTextInput(); }
 static void gfx_sdl_stop_text_input(void) { SDL_StopTextInput(); }
 static char* gfx_sdl_get_clipboard_text(void) { return SDL_GetClipboardText(); }
+static void gfx_sdl_set_clipboard_text(char* text) { SDL_SetClipboardText(text); }
+static void gfx_sdl_set_cursor_visible(bool visible) { SDL_ShowCursor(visible ? SDL_ENABLE : SDL_DISABLE); }
 
 struct GfxWindowManagerAPI gfx_sdl = {
     gfx_sdl_init,
@@ -385,6 +380,8 @@ struct GfxWindowManagerAPI gfx_sdl = {
     gfx_sdl_start_text_input,
     gfx_sdl_stop_text_input,
     gfx_sdl_get_clipboard_text,
+    gfx_sdl_set_clipboard_text,
+    gfx_sdl_set_cursor_visible,
 };
 
 #endif // BACKEND_WM

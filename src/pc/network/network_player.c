@@ -1,13 +1,45 @@
 #include <stdio.h>
 #include "network_player.h"
-#include "game/chat.h"
 #include "game/mario_misc.h"
 #include "reservation_area.h"
+#include "pc/djui/djui.h"
 #include "pc/debuglog.h"
+#include "pc/utils/misc.h"
+#include "game/area.h"
 
 struct NetworkPlayer gNetworkPlayers[MAX_PLAYERS] = { 0 };
 struct NetworkPlayer* gNetworkPlayerLocal = NULL;
 struct NetworkPlayer* gNetworkPlayerServer = NULL;
+static char sDefaultPlayerName[] = "Player";
+
+void network_player_init(void) {
+    gNetworkPlayers[0].modelIndex = (configPlayerModel < CT_MAX) ? configPlayerModel : 0;
+    gNetworkPlayers[0].paletteIndex = configPlayerPalette;
+}
+
+void network_player_update_model(u8 localIndex) {
+    struct MarioState* m = &gMarioStates[localIndex];
+    if (m == NULL) { return; }
+    m->character = &gCharacters[gNetworkPlayers[localIndex].modelIndex];
+    if (m->marioObj == NULL) { return; }
+    m->marioObj->header.gfx.sharedChild = gLoadedGraphNodes[m->character->modelId];
+}
+
+u8 network_player_unique_palette(u8 palette) {
+    u16 iterations = 0;
+    retry_palette:
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        if (!gNetworkPlayers[i].connected) { continue; }
+        if (gNetworkPlayers[i].paletteIndex == palette) {
+            palette = (palette + 1) % gNumPlayerColors;
+            if (iterations++ >= gNumPlayerColors) {
+                return palette;
+            }
+            goto retry_palette;
+        }
+    }
+    return palette;
+}
 
 bool network_player_any_connected(void) {
     for (int i = 1; i < MAX_PLAYERS; i++) {
@@ -79,47 +111,84 @@ struct NetworkPlayer* get_network_player_smallest_global(void) {
     return smallest;
 }
 
+static void network_player_update_level_popup(void) {
+    static s16 sCachedCourseNum = 0;
+    static s16 sCachedActStarNum = 0;
+    static s16 sCachedLevelNum = 0;
+
+    bool inBonusCourse = (gCurrCourseNum >= 16);
+    bool allowPopup = (sCachedCourseNum == gCurrCourseNum)
+                   && (sCachedActStarNum == gCurrActStarNum)
+                   && (sCachedLevelNum == gCurrLevelNum)
+                   && (gCurrActStarNum != 99)                          // suppress popup for credits sequence
+                   && (inBonusCourse || gCurrActStarNum != 0);   // suppress popup for star selection
+
+    sCachedCourseNum  = gCurrCourseNum;
+    sCachedActStarNum = gCurrActStarNum;
+    sCachedLevelNum   =  gCurrLevelNum;
+
+    for (int i = 1; i < MAX_PLAYERS; i++) {
+        struct NetworkPlayer* np = &gNetworkPlayers[i];
+        if (!np->connected) { continue; }
+        bool localLevelMatch = (np->currCourseNum == gCurrCourseNum && np->currActNum == gCurrActStarNum && np->currLevelNum == gCurrLevelNum);
+        if (np->localLevelMatch != localLevelMatch) {
+            np->localLevelMatch = localLevelMatch;
+
+            if (!allowPopup) { continue; }
+            u8* rgb = get_player_color(np->paletteIndex, 0);
+            char popupMsg[128] = { 0 };
+            snprintf(popupMsg, 128, "\\#%02x%02x%02x\\%s\\#dcdcdc\\ %s this level.", rgb[0], rgb[1], rgb[2], np->name, localLevelMatch ? "entered" : "left");
+            djui_popup_create(popupMsg, 1);
+        }
+    }
+}
+
 void network_player_update(void) {
-//#ifndef DEVELOPMENT
+    if (!network_player_any_connected()) { return; }
+
+    network_player_update_level_popup();
+
+#ifndef DEVELOPMENT
     if (gNetworkType == NT_SERVER) {
         for (int i = 1; i < MAX_PLAYERS; i++) {
             struct NetworkPlayer* np = &gNetworkPlayers[i];
             if (!np->connected) { continue; }
-            float elapsed = (clock() - np->lastReceived) / (float)CLOCKS_PER_SEC;
+            float elapsed = (clock_elapsed() - np->lastReceived);
             if (elapsed > NETWORK_PLAYER_TIMEOUT) {
                 LOG_INFO("dropping player %d", i);
                 network_player_disconnected(i);
                 continue;
             }
-            elapsed = (clock() - np->lastSent) / (float)CLOCKS_PER_SEC;
+            elapsed = (clock_elapsed() - np->lastSent);
             if (elapsed > NETWORK_PLAYER_TIMEOUT / 3.0f) {
                 network_send_keep_alive(np->localIndex);
             }
         }
     } else if (gNetworkType == NT_CLIENT) {
-        bool connectionAlive = false;
         struct NetworkPlayer* np = gNetworkPlayerServer;
         if (!np->connected) { return; }
-        float elapsed = (clock() - np->lastReceived) / (float)CLOCKS_PER_SEC;
+        float elapsed = (clock_elapsed() - np->lastReceived);
 
-        if (elapsed <= NETWORK_PLAYER_TIMEOUT * 1.5f) {
-            connectionAlive = true;
-            return;
+        if (elapsed > NETWORK_PLAYER_TIMEOUT * 1.5f) {
+            LOG_INFO("dropping due to no server connectivity");
+            network_shutdown(false);
         }
 
-        if (!connectionAlive) {
-            network_shutdown();
-        }
-
-        elapsed = (clock() - np->lastSent) / (float)CLOCKS_PER_SEC;
+        elapsed = (clock_elapsed() - np->lastSent);
         if (elapsed > NETWORK_PLAYER_TIMEOUT / 3.0f) {
             network_send_keep_alive(np->localIndex);
         }
     }
-//#endif
+#endif
 }
 
-u8 network_player_connected(enum NetworkPlayerType type, u8 globalIndex) {
+u8 network_player_connected(enum NetworkPlayerType type, u8 globalIndex, u8 modelIndex, u8 paletteIndex, char* name) {
+    // ensure that a name is given
+    if (name[0] == '\0') {
+        name = sDefaultPlayerName;
+    }
+    if (modelIndex >= CT_MAX) { modelIndex = 0; }
+
     if (type == NPT_LOCAL) {
         struct NetworkPlayer* np = &gNetworkPlayers[0];
         if (np->connected) {
@@ -140,6 +209,13 @@ u8 network_player_connected(enum NetworkPlayerType type, u8 globalIndex) {
         np->currAreaIndex      = gCurrAreaIndex;
         np->currLevelSyncValid = false;
         np->currAreaSyncValid  = false;
+        np->modelIndex         = modelIndex;
+        np->paletteIndex       = paletteIndex;
+        snprintf(np->name, MAX_PLAYER_STRING, "%s", name);
+        network_player_update_model(0);
+
+        for (int j = 0; j < MAX_RX_SEQ_IDS; j++) { np->rxSeqIds[j] = 0; np->rxPacketHash[j] = 0; }
+        np->onRxSeqId = 0;
 
         gNetworkPlayerLocal = np;
 
@@ -156,8 +232,13 @@ u8 network_player_connected(enum NetworkPlayerType type, u8 globalIndex) {
             if (!np->connected) { continue; }
             if (np->globalIndex != globalIndex) { continue; }
             np->localIndex = i;
-            np->lastReceived = clock();
-            np->lastSent = clock();
+            np->lastReceived = clock_elapsed();
+            np->lastSent = clock_elapsed();
+            np->modelIndex = modelIndex;
+            np->paletteIndex = paletteIndex;
+            np->localLevelMatch = (np->currCourseNum == gCurrCourseNum && np->currActNum == gCurrActStarNum && np->currLevelNum == gCurrLevelNum);
+            snprintf(np->name, MAX_PLAYER_STRING, "%s", name);
+            network_player_update_model(i);
             if (gNetworkType == NT_SERVER || type == NPT_SERVER) { gNetworkSystem->save_id(i, 0); }
             LOG_ERROR("player connected, reusing local %d, global %d, duplicate event?", i, globalIndex);
             return i;
@@ -170,11 +251,11 @@ u8 network_player_connected(enum NetworkPlayerType type, u8 globalIndex) {
         memset(np, 0, sizeof(struct NetworkPlayer));
         np->connected = true;
         np->currLevelAreaSeqId = 0;
-        if (!np->currAreaSyncValid) {
-            np->currCourseNum      = -1;
-            np->currActNum         = -1;
-            np->currLevelNum       = -1;
-            np->currAreaIndex      = -1;
+        if (gNetworkType == NT_SERVER && !np->currAreaSyncValid) {
+            np->currCourseNum      = 0;
+            np->currActNum         = 0;
+            np->currLevelNum       = 16;
+            np->currAreaIndex      = 1;
             np->currLevelSyncValid = false;
             np->currAreaSyncValid  = false;
         }
@@ -182,12 +263,25 @@ u8 network_player_connected(enum NetworkPlayerType type, u8 globalIndex) {
         np->localIndex = i;
         np->globalIndex = (gNetworkType == NT_SERVER) ? i : globalIndex;
         np->type = type;
-        np->lastReceived = clock();
-        np->lastSent = clock();
+        np->lastReceived = clock_elapsed();
+        np->lastSent = clock_elapsed();
+        np->modelIndex = modelIndex;
+        np->paletteIndex = paletteIndex;
+        np->localLevelMatch = (np->currCourseNum == gCurrCourseNum && np->currActNum == gCurrActStarNum && np->currLevelNum == gCurrLevelNum);
+        snprintf(np->name, MAX_PLAYER_STRING, "%s", name);
+        network_player_update_model(i);
         if (gNetworkType == NT_SERVER || type == NPT_SERVER) { gNetworkSystem->save_id(i, 0); }
         for (int j = 0; j < MAX_SYNC_OBJECTS; j++) { gSyncObjects[j].rxEventId[i] = 0; }
-        if (type == NPT_SERVER) { gNetworkPlayerServer = np; }
-        else { chat_add_message_ext("player connected", CMT_SYSTEM, get_player_color(np->globalIndex, 0));
+        for (int j = 0; j < MAX_RX_SEQ_IDS; j++) { np->rxSeqIds[j] = 0; np->rxPacketHash[j] = 0; }
+        np->onRxSeqId = 0;
+        if (type == NPT_SERVER) {
+            gNetworkPlayerServer = np;
+        } else {
+            // display popup
+            u8* rgb = get_player_color(np->paletteIndex, 0);
+            char popupMsg[128] = { 0 };
+            snprintf(popupMsg, 128, "\\#%02x%02x%02x\\%s\\#dcdcdc\\ connected.", rgb[0], rgb[1], rgb[2], np->name);
+            djui_popup_create(popupMsg, 1);
         }
         LOG_INFO("player connected, local %d, global %d", i, np->globalIndex);
         packet_ordered_clear(np->globalIndex);
@@ -204,7 +298,7 @@ u8 network_player_disconnected(u8 globalIndex) {
             LOG_ERROR("player disconnected, but it's local.. this shouldn't happen!");
             return UNKNOWN_GLOBAL_INDEX;
         } else {
-            network_shutdown();
+            network_shutdown(true);
         }
     }
 
@@ -226,9 +320,16 @@ u8 network_player_disconnected(u8 globalIndex) {
         np->currLevelSyncValid = false;
         np->currAreaSyncValid  = false;
         gNetworkSystem->clear_id(i);
+        network_forget_all_reliable_from(i);
         for (int j = 0; j < MAX_SYNC_OBJECTS; j++) { gSyncObjects[j].rxEventId[i] = 0; }
         LOG_INFO("player disconnected, local %d, global %d", i, globalIndex);
-        chat_add_message_ext("player disconnected", CMT_SYSTEM, get_player_color(globalIndex, 0));
+        
+        // display popup
+        u8* rgb = get_player_color(np->paletteIndex, 0);
+        char popupMsg[128] = { 0 };
+        snprintf(popupMsg, 128, "\\#%02x%02x%02x\\%s\\#dcdcdc\\ disconnected.", rgb[0], rgb[1], rgb[2], np->name);
+        djui_popup_create(popupMsg, 1);
+
         packet_ordered_clear(globalIndex);
         reservation_area_change(np);
         return i;
@@ -245,6 +346,6 @@ void network_player_shutdown(void) {
         gNetworkSystem->clear_id(i);
     }
 
-    chat_add_message("network shutdown", CMT_SYSTEM);
+    djui_popup_create("\\#ffa0a0\\Error:\\#dcdcdc\\ network shutdown.", 1);
     LOG_INFO("cleared all network players");
 }

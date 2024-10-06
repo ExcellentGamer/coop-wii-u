@@ -24,7 +24,6 @@ void bhv_checkerboard_elevator_group_init(void) {
                                      bhvCheckerboardPlatformSub);
         sp2C->oCheckerBoardPlatformUnk1AC = D_8032F754[sp34].unk2;
         sp2C->oTimer = 0;
-        sp2C->oCheckerBoardPlatformTimer = 0;
         vec3f_copy_2(sp2C->header.gfx.scale, D_8032F754[sp34].unk1);
     }
 }
@@ -49,70 +48,56 @@ void checkerboard_plat_act_rotate(s32 a0, s16 a1) {
     o->oCheckerBoardPlatformUnkF8 = a0;
 }
 
+static void bhv_checkerboard_platform_run_once(void) {
+    if (o->oDistanceToMario < 1000.0f) {
+        cur_obj_play_sound_1(SOUND_ENV_ELEVATOR4);
+    }
+    load_object_collision_model();
+}
+
 void bhv_checkerboard_platform_init(void) {
     o->oCheckerBoardPlatformUnkFC = o->parentObj->oBehParams2ndByte;
+    o->areaTimerType = AREA_TIMER_TYPE_LOOP;
+    o->areaTimer = 0;
+    o->areaTimerDuration = 132 + o->oCheckerBoardPlatformUnkFC * 2;
+    o->areaTimerRunOnceCallback = bhv_checkerboard_platform_run_once;
 }
 
 void bhv_checkerboard_platform_loop(void) {
-    // make sure we're loaded and synchronized
-    if (!gNetworkAreaLoaded) {
-        o->oTimer = 0;
-        o->oCheckerBoardPlatformTimer = 0;
-        return;
+    f32 sp24 = o->oCheckerBoardPlatformUnk1AC;
+    o->oCheckerBoardPlatformUnkF8 = 0;
+    switch (o->oAction) {
+        case 0:
+            if (o->oBehParams2ndByte == 0)
+                o->oAction = 1;
+            else
+                o->oAction = 3;
+            break;
+        case 1:
+            checkerboard_plat_act_move_y(2, 10.0f, o->oCheckerBoardPlatformUnkFC);
+            break;
+        case 2:
+            checkerboard_plat_act_rotate(3, 512);
+            break;
+        case 3:
+            checkerboard_plat_act_move_y(4, -10.0f, o->oCheckerBoardPlatformUnkFC);
+            break;
+        case 4:
+            checkerboard_plat_act_rotate(1, -512);
+            break;
+    }
+    o->oMoveAnglePitch += absi(o->oAngleVelPitch);
+    o->oFaceAnglePitch += absi(o->oAngleVelPitch);
+    o->oFaceAngleYaw = o->oMoveAngleYaw;
+    if (o->oMoveAnglePitch != 0) {
+        o->oForwardVel = signum_positive(o->oAngleVelPitch) * sins(o->oMoveAnglePitch) * sp24;
+        o->oVelY = signum_positive(o->oAngleVelPitch) * coss(o->oMoveAnglePitch) * sp24;
+    }
+    if (o->oCheckerBoardPlatformUnkF8 == 1) {
+        o->oAngleVelPitch = 0;
+        o->oFaceAnglePitch &= ~0x7FFF;
+        cur_obj_move_using_fvel_and_gravity();
     } else {
-        u32 loopLength = 132 + o->oCheckerBoardPlatformUnkFC * 2;
-        if (o->oCheckerBoardPlatformTimer == 0 && (gNetworkAreaTimer - o->oCheckerBoardPlatformTimer) >= loopLength) {
-            o->oTimer = 0;
-            o->oCheckerBoardPlatformTimer = ((gNetworkAreaTimer - o->oCheckerBoardPlatformTimer) / loopLength) * loopLength;
-        }
+        cur_obj_move_using_fvel_and_gravity();
     }
-
-    if (o->oDistanceToMario < 1000.0f)
-        cur_obj_play_sound_1(SOUND_ENV_ELEVATOR4);
-
-    while (o->oCheckerBoardPlatformTimer < gNetworkAreaTimer) {
-        s32 oldAction = o->oAction;
-        f32 sp24 = o->oCheckerBoardPlatformUnk1AC;
-        o->oCheckerBoardPlatformUnkF8 = 0;
-        switch (o->oAction) {
-            case 0:
-                if (o->oBehParams2ndByte == 0)
-                    o->oAction = 1;
-                else
-                    o->oAction = 3;
-                break;
-            case 1:
-                checkerboard_plat_act_move_y(2, 10.0f, o->oCheckerBoardPlatformUnkFC);
-                break;
-            case 2:
-                checkerboard_plat_act_rotate(3, 512);
-                break;
-            case 3:
-                checkerboard_plat_act_move_y(4, -10.0f, o->oCheckerBoardPlatformUnkFC);
-                break;
-            case 4:
-                checkerboard_plat_act_rotate(1, -512);
-                break;
-        }
-        o->oMoveAnglePitch += absi(o->oAngleVelPitch);
-        o->oFaceAnglePitch += absi(o->oAngleVelPitch);
-        o->oFaceAngleYaw = o->oMoveAngleYaw;
-        if (o->oMoveAnglePitch != 0) {
-            o->oForwardVel = signum_positive(o->oAngleVelPitch) * sins(o->oMoveAnglePitch) * sp24;
-            o->oVelY = signum_positive(o->oAngleVelPitch) * coss(o->oMoveAnglePitch) * sp24;
-        }
-        if (o->oCheckerBoardPlatformUnkF8 == 1) {
-            o->oAngleVelPitch = 0;
-            o->oFaceAnglePitch &= ~0x7FFF;
-            cur_obj_move_using_fvel_and_gravity();
-        } else
-            cur_obj_move_using_fvel_and_gravity();
-
-        o->oCheckerBoardPlatformTimer++;
-        if (o->oCheckerBoardPlatformTimer < gNetworkAreaTimer) {
-            cur_obj_fake_update();
-        }
-    }
-
-    load_object_collision_model();
 }

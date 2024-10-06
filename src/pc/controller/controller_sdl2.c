@@ -5,6 +5,10 @@
 #include <stdbool.h>
 #include <math.h>
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 #include <SDL2/SDL.h>
 
 // Analog camera movement by Pathétique (github.com/vrmiguel), y0shin and Mors
@@ -19,6 +23,8 @@
 #include "../fs/fs.h"
 
 #include "game/level_update.h"
+
+#include "pc/djui/djui.h"
 
 // mouse buttons are also in the controller namespace (why), just offset 0x100
 #define VK_OFS_SDL_MOUSE 0x0100
@@ -163,10 +169,11 @@ static void controller_sdl_read(OSContPad *pad) {
 
     u32 mouse = SDL_GetRelativeMouseState(&mouse_x, &mouse_y);
 
-    for (u32 i = 0; i < num_mouse_binds; ++i)
-        if (mouse & SDL_BUTTON(mouse_binds[i][0]))
-            pad->button |= mouse_binds[i][1];
-
+    if (!gInteractableOverridePad) {
+        for (u32 i = 0; i < num_mouse_binds; ++i)
+            if (mouse & SDL_BUTTON(mouse_binds[i][0]))
+                pad->button |= mouse_binds[i][1];
+    }
     // remember buttons that changed from 0 to 1
     last_mouse = (mouse_buttons ^ mouse) & mouse;
     mouse_buttons = mouse;
@@ -268,7 +275,20 @@ static void controller_sdl_read(OSContPad *pad) {
 
 void controller_sdl_read_mouse_window(void) {
     if (!init_ok) { return; }
+
+#if defined(_WIN32) && (defined(RAPI_D3D12) || defined(RAPI_D3D11))
+    mouse_window_buttons = 0;
+    mouse_window_buttons |= (GetAsyncKeyState(VK_LBUTTON) ? (1 << 0) : 0);
+    mouse_window_buttons |= (GetAsyncKeyState(VK_RBUTTON) ? (1 << 1) : 0);
+    POINT p;
+    if (GetCursorPos(&p) && ScreenToClient(GetActiveWindow(), &p))
+    {
+        mouse_window_x = p.x;
+        mouse_window_y = p.y;
+    }
+#else
     mouse_window_buttons = SDL_GetMouseState(&mouse_window_x, &mouse_window_y);
+#endif
 }
 
 static void controller_sdl_rumble_play(f32 strength, f32 length) {

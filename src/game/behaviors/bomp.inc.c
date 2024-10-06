@@ -3,15 +3,11 @@
 void bhv_small_bomp_init(void) {
     o->oFaceAngleYaw -= 0x4000;
     o->oSmallBompInitX = o->oPosX;
-    o->oTimer = random_float() * 100.0f;
-    if (!network_sync_object_initialized(o)) {
-        network_init_object(o, SYNC_DISTANCE_ONLY_EVENTS);
-        network_init_object_field(o, &o->oAction);
-        network_init_object_field(o, &o->oForwardVel);
-        network_init_object_field(o, &o->oMoveAngleYaw);
-        network_init_object_field(o, &o->oPosX);
-        network_init_object_field(o, &o->oTimer);
-    }
+    o->oTimer = position_based_random_float_position() * 100.0f;
+    o->areaTimerType = AREA_TIMER_TYPE_LOOP;
+    o->areaTimer = 0;
+    o->areaTimerDuration = 168;
+    o->areaTimerRunOnceCallback = load_object_collision_model;
 }
 
 void bhv_small_bomp_loop(void) {
@@ -42,13 +38,11 @@ void bhv_small_bomp_loop(void) {
                 o->oForwardVel = 0;
             }
 
-            if (o->oTimer >= 60) {
-                if (o->oTimer == 60) { cur_obj_play_sound_2(SOUND_OBJ_UNKNOWN2); }
-                if (!network_owns_object(o)) { break; }
+            if (o->oTimer == 60) {
                 o->oAction = BOMP_ACT_RETRACT;
                 o->oForwardVel = 10.0f;
                 o->oMoveAngleYaw -= 0x8000;
-                network_send_object(o);
+                cur_obj_play_sound_2(SOUND_OBJ_UNKNOWN2);
             }
             break;
 
@@ -69,15 +63,11 @@ void bhv_small_bomp_loop(void) {
 
 void bhv_large_bomp_init(void) {
     o->oMoveAngleYaw += 0x4000;
-    o->oTimer = random_float() * 100.0f;
-    if (!network_sync_object_initialized(o)) {
-        network_init_object(o, SYNC_DISTANCE_ONLY_EVENTS);
-        network_init_object_field(o, &o->oAction);
-        network_init_object_field(o, &o->oForwardVel);
-        network_init_object_field(o, &o->oMoveAngleYaw);
-        network_init_object_field(o, &o->oPosX);
-        network_init_object_field(o, &o->oTimer);
-    }
+    o->oTimer = position_based_random_float_position() * 100.0f;
+    o->areaTimerType = AREA_TIMER_TYPE_LOOP;
+    o->areaTimer = 0;
+    o->areaTimerDuration = 168;
+    o->areaTimerRunOnceCallback = load_object_collision_model;
 }
 
 void bhv_large_bomp_loop(void) {
@@ -108,13 +98,11 @@ void bhv_large_bomp_loop(void) {
                 o->oForwardVel = 0;
             }
 
-            if (o->oTimer >= 60) {
-                if (o->oTimer == 60) { cur_obj_play_sound_2(SOUND_OBJ_UNKNOWN2); }
-                if (!network_owns_object(o)) { break; }
+            if (o->oTimer == 60) {
                 o->oAction = BOMP_ACT_RETRACT;
                 o->oForwardVel = 10.0f;
                 o->oMoveAngleYaw -= 0x8000;
-                network_send_object(o);
+                cur_obj_play_sound_2(SOUND_OBJ_UNKNOWN2);
             }
             break;
 
