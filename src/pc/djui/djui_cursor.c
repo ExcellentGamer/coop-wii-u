@@ -1,6 +1,7 @@
 #include "djui.h"
 #include "pc/controller/controller_mouse.h"
 #include "pc/controller/controller_sdl.h"
+#include "pc/controller/controller_wiiu.h"
 #include "pc/gfx/gfx_window_manager_api.h"
 #include "pc/pc_main.h"
 
@@ -22,13 +23,17 @@ void djui_cursor_set_visible(bool visible) {
         djui_base_set_visible(&sMouseCursor->base, visible);
     }
 
+#ifndef TARGET_WII_U
     if (configWindow.fullscreen) {
         wm_api->set_cursor_visible(false);
     } else {
+#endif
         wm_api->set_cursor_visible(!visible);
+#ifndef TARGET_WII_U
     }
     sSavedMouseX = mouse_window_x;
     sSavedMouseY = mouse_window_y;
+#endif
 }
 
 bool djui_cursor_inside_base(struct DjuiBase* base) {
@@ -45,10 +50,12 @@ static void djui_cursor_base_hover_location(struct DjuiBase* base, f32* x, f32* 
 }
 
 void djui_cursor_input_controlled_center(struct DjuiBase* base) {
+#ifndef TARGET_WII_U
     if (!sCursorMouseControlled) {
         sInputControlledBase = base;
         djui_cursor_set_visible(base != NULL);
     }
+#endif
 }
 
 static f32 djui_cursor_base_distance(struct DjuiBase* base, f32 xScale, f32 yScale) {
@@ -69,15 +76,14 @@ static void djui_cursor_move_check(s8 xDir, s8 yDir, struct DjuiBase** pick, str
         y1 = base->elem.y;
         x2 = base->elem.x + base->elem.width;
         y2 = base->elem.y + base->elem.height;
+
         bool xWithin = (gCursorX >= x1 && gCursorX <= x2) || sCursorMouseControlled;
         bool yWithin = (gCursorY >= y1 && gCursorY <= y2) || sCursorMouseControlled;
-
         bool valid = false;
         if (yDir > 0 && gCursorY < y1 && xWithin) { valid = true; }
         if (yDir < 0 && gCursorY > y2 && xWithin) { valid = true; }
         if (xDir > 0 && gCursorX < x1 && yWithin) { valid = true; }
         if (xDir < 0 && gCursorX > x2 && yWithin) { valid = true; }
-
         f32 xH, yH;
         djui_cursor_base_hover_location(base, &xH, &yH);
         if (valid) {
@@ -146,6 +152,20 @@ void djui_cursor_update(void) {
 
     // set cursor sprite
     if ((gInteractablePad.button & PAD_BUTTON_A) || (mouse_window_buttons & MOUSE_BUTTON_1)) {
+        djui_image_set_image(sMouseCursor, gd_texture_hand_closed, 32, 32, 16);
+    } else {
+        djui_image_set_image(sMouseCursor, gd_texture_hand_open, 32, 32, 16);
+    }
+#else
+    if (sInputControlledBase != NULL) {
+        djui_cursor_base_hover_location(sInputControlledBase, &gCursorX, &gCursorY);
+    }
+
+    // set cursor position
+    djui_base_set_location(&sMouseCursor->base, gCursorX - 13, gCursorY - 13);
+
+    // set cursor sprite
+    if ((gInteractablePad.button & PAD_BUTTON_A)) {
         djui_image_set_image(sMouseCursor, gd_texture_hand_closed, 32, 32, 16);
     } else {
         djui_image_set_image(sMouseCursor, gd_texture_hand_open, 32, 32, 16);

@@ -21,6 +21,7 @@ void djui_panel_controls_create(struct DjuiBase* caller) {
         djui_base_set_color(&bindBody->base, 0, 0, 0, 0);
         djui_flow_layout_set_margin(bindBody, 1);
         {
+#ifndef TARGET_WII_U
             struct DjuiBind* bind1  = djui_bind_create(&bindBody->base, "A", configKeyA);
             djui_bind_create(&bindBody->base, "B",       configKeyB);
             djui_bind_create(&bindBody->base, "Start",   configKeyStart);
@@ -33,6 +34,7 @@ void djui_panel_controls_create(struct DjuiBase* caller) {
             djui_bind_create(&bindBody->base, "C Right", configKeyCRight);
             djui_bind_create(&bindBody->base, "Chat",    configKeyChat);
             defaultBase = &bind1->buttons[0]->base;
+#endif
         }
 
         struct DjuiSlider* slider1 = djui_slider_create(&body->base, "Deadzone", &configStickDeadzone, 0, 100);

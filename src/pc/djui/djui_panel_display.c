@@ -14,6 +14,7 @@ void djui_panel_display_create(struct DjuiBase* caller) {
     struct DjuiFlowLayout* body = (struct DjuiFlowLayout*)djui_three_panel_get_body(panel);
 
     {
+#ifndef TARGET_WII_U
         struct DjuiCheckbox* checkbox1 = djui_checkbox_create(&body->base, "Fullscreen", &configWindow.fullscreen);
         djui_base_set_size_type(&checkbox1->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
         djui_base_set_size(&checkbox1->base, 1.0f, 32);
@@ -24,7 +25,7 @@ void djui_panel_display_create(struct DjuiBase* caller) {
         djui_base_set_size_type(&checkbox2->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
         djui_base_set_size(&checkbox2->base, 1.0f, 32);
         djui_interactable_hook_value_change(&checkbox2->base, djui_panel_display_apply);
-
+#endif
         struct DjuiCheckbox* checkbox4 = djui_checkbox_create(&body->base, "HUD", &configHUD);
         djui_base_set_size_type(&checkbox4->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
         djui_base_set_size(&checkbox4->base, 1.0f, 32);

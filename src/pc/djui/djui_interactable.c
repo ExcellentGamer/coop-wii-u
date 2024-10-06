@@ -18,7 +18,9 @@ static bool sIgnoreInteractableUntilCursorReleased = false;
 struct DjuiBase* gDjuiHovered = NULL;
 static struct DjuiBase* sInteractableFocus   = NULL;
 static struct DjuiBase* sInteractableBinding = NULL;
+#ifndef TARGET_WII_U
 static struct DjuiBase* sMouseDown    = NULL;
+#endif
 bool gInteractableOverridePad         = false;
 OSContPad gInteractablePad            = { 0 };
 static OSContPad sLastInteractablePad = { 0 };
@@ -189,7 +191,9 @@ bool djui_interactable_on_key_down(int scancode) {
     if (gDjuiChatBox != NULL && !gDjuiChatBoxFocus) {
         bool pressChat = false;
         for (int i = 0; i < MAX_BINDS; i++) {
+#ifndef TARGET_WII_U
             if (scancode == (int)configKeyChat[i]) { pressChat = true; }
+#endif
         }
 
         if (pressChat) {
@@ -295,6 +299,7 @@ void djui_interactable_update(void) {
     djui_interactable_update_pad();
 
     // prevent pressing buttons when they should be ignored
+#ifndef TARGET_WII_U
     int mouseButtons = mouse_window_buttons;
     u16 padButtons = gInteractablePad.button;
     if (sIgnoreInteractableUntilCursorReleased) {
@@ -305,8 +310,10 @@ void djui_interactable_update(void) {
             sIgnoreInteractableUntilCursorReleased = false;
         }
     }
+#endif
 
     // update focused
+#ifndef TARGET_WII_U
     if (sInteractableFocus) {
         u16 mainButtons = PAD_BUTTON_A | PAD_BUTTON_B;
         if ((mouseButtons & MOUSE_BUTTON_1) && !(sLastMouseButtons && MOUSE_BUTTON_1) && !djui_cursor_inside_base(sInteractableFocus)) {
@@ -331,18 +338,26 @@ void djui_interactable_update(void) {
     } else if ((padButtons & PAD_BUTTON_A) || (mouseButtons & MOUSE_BUTTON_1)) {
         // cursor down events
         if (gDjuiHovered != NULL) {
+#ifndef TARGET_WII_U
             sMouseDown = gDjuiHovered;
+#endif
             gDjuiHovered = NULL;
+#ifndef TARGET_WII_U
             djui_interactable_on_cursor_down_begin(sMouseDown, !mouseButtons);
+#endif
         } else {
+#ifndef TARGET_WII_U
             djui_interactable_on_cursor_down(sMouseDown);
+#endif
         }
     } else {
         // cursor up event
+#ifndef TARGET_WII_U
         if (sMouseDown != NULL) {
             djui_interactable_on_cursor_down_end(sMouseDown);
             sMouseDown = NULL;
         }
+#endif
         struct DjuiBase* lastHovered = gDjuiHovered;
         gDjuiHovered = NULL;
         djui_interactable_cursor_update_active(&gDjuiRoot->base);
@@ -355,6 +370,7 @@ void djui_interactable_update(void) {
 
     sLastInteractablePad = gInteractablePad;
     sLastMouseButtons = mouseButtons;
+#endif
 }
 
 void djui_interactable_hook_hover(struct DjuiBase* base,
