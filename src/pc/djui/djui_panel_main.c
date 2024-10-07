@@ -39,12 +39,13 @@ void djui_panel_main_create(struct DjuiBase* caller) {
             djui_base_set_size_type(&button3->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
             djui_base_set_size(&button3->base, 1.0f, 64);
             djui_interactable_hook_click(&button3->base, djui_panel_options_create);
-
+#ifndef TARGET_WII_U
             struct DjuiButton* button4 = djui_button_create(&body->base, "Quit");
             djui_base_set_size_type(&button4->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
             djui_base_set_size(&button4->base, 1.0f, 64);
             djui_button_set_style(button4, 1);
             djui_interactable_hook_click(&button4->base, djui_panel_main_quit);
+#endif
         }
 
         char* version = get_version();

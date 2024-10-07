@@ -34,12 +34,12 @@ void djui_panel_display_create(struct DjuiBase* caller) {
         struct DjuiSelectionbox* selectionbox1 = djui_selectionbox_create(&body->base, "Filtering", filterChoices, 3, &configFiltering);
         djui_base_set_size_type(&selectionbox1->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
         djui_base_set_size(&selectionbox1->base, 1.0f, 32);
-
+#ifndef TARGET_WII_U
         char* fpsChoices[3] = { "30", "60" };
         struct DjuiSelectionbox* selectionbox2 = djui_selectionbox_create(&body->base, "FPS", fpsChoices, 2, &config60Fps);
         djui_base_set_size_type(&selectionbox2->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
         djui_base_set_size(&selectionbox2->base, 1.0f, 32);
-
+#endif
         char* drawDistanceChoices[6] = { "0.5x", "1x", "1.5x", "3x", "10x", "100x" };
         struct DjuiSelectionbox* selectionbox3 = djui_selectionbox_create(&body->base, "Draw Distance", drawDistanceChoices, 6, &configDrawDistance);
         djui_base_set_size_type(&selectionbox3->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);

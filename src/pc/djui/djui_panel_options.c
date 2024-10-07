@@ -24,7 +24,7 @@ void djui_panel_options_create(struct DjuiBase* caller) {
             djui_interactable_hook_click(&button1->base, djui_panel_player_create);
             defaultBase = &button1->base;
         }
-
+#ifndef TARGET_WII_U
         struct DjuiButton* button2 = djui_button_create(&body->base, "Camera");
         djui_base_set_size_type(&button2->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
         djui_base_set_size(&button2->base, 1.0f, 64);
@@ -53,6 +53,23 @@ void djui_panel_options_create(struct DjuiBase* caller) {
         djui_base_set_size(&button6->base, 1.0f, 64);
         djui_button_set_style(button6, 1);
         djui_interactable_hook_click(&button6->base, djui_panel_options_back);
+#else
+        struct DjuiButton* button2 = djui_button_create(&body->base, "Display");
+        djui_base_set_size_type(&button2->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
+        djui_base_set_size(&button2->base, 1.0f, 64);
+        djui_interactable_hook_click(&button2->base, djui_panel_display_create);
+
+        struct DjuiButton* button3 = djui_button_create(&body->base, "Sound");
+        djui_base_set_size_type(&button3->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
+        djui_base_set_size(&button3->base, 1.0f, 64);
+        djui_interactable_hook_click(&button3->base, djui_panel_sound_create);
+
+        struct DjuiButton* button4 = djui_button_create(&body->base, "Back");
+        djui_base_set_size_type(&button4->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
+        djui_base_set_size(&button4->base, 1.0f, 64);
+        djui_button_set_style(button4, 1);
+        djui_interactable_hook_click(&button4->base, djui_panel_options_back);
+#endif
     }
 
     djui_panel_add(caller, &panel->base, defaultBase);

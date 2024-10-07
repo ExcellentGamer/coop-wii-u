@@ -15,6 +15,7 @@ void djui_panel_camera_create(struct DjuiBase* caller) {
     struct DjuiFlowLayout* body = (struct DjuiFlowLayout*)djui_three_panel_get_body(panel);
 
     {
+#ifndef TARGET_WII_U
         struct DjuiCheckbox* checkbox1 = djui_checkbox_create(&body->base, "Free Camera", &configEnableCamera);
         djui_base_set_size_type(&checkbox1->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
         djui_base_set_size(&checkbox1->base, 1.0f, 32);
@@ -65,7 +66,7 @@ void djui_panel_camera_create(struct DjuiBase* caller) {
         djui_base_set_size_type(&slider5->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
         djui_interactable_hook_value_change(&slider5->base, djui_panel_camera_value_changed);
         djui_base_set_size(&slider5->base, 1.0f, 32);
-
+#endif
         struct DjuiButton* button6 = djui_button_create(&body->base, "Back");
         djui_base_set_size_type(&button6->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
         djui_base_set_size(&button6->base, 1.0f, 64);

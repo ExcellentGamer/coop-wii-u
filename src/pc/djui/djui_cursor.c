@@ -27,9 +27,7 @@ void djui_cursor_set_visible(bool visible) {
     if (configWindow.fullscreen) {
         wm_api->set_cursor_visible(false);
     } else {
-#endif
         wm_api->set_cursor_visible(!visible);
-#ifndef TARGET_WII_U
     }
     sSavedMouseX = mouse_window_x;
     sSavedMouseY = mouse_window_y;
@@ -50,12 +48,10 @@ static void djui_cursor_base_hover_location(struct DjuiBase* base, f32* x, f32* 
 }
 
 void djui_cursor_input_controlled_center(struct DjuiBase* base) {
-#ifndef TARGET_WII_U
     if (!sCursorMouseControlled) {
         sInputControlledBase = base;
         djui_cursor_set_visible(base != NULL);
     }
-#endif
 }
 
 static f32 djui_cursor_base_distance(struct DjuiBase* base, f32 xScale, f32 yScale) {

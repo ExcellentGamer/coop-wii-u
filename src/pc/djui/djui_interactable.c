@@ -200,7 +200,6 @@ bool djui_interactable_on_key_down(int scancode) {
             return true;
         }
     }
-
     if (gDjuiChatBoxFocus || djui_panel_is_active()) {
         switch (scancode) {
             case SCANCODE_UP:    sKeyboardHoldDirection = PAD_HOLD_DIR_UP;    return true;
@@ -210,7 +209,6 @@ bool djui_interactable_on_key_down(int scancode) {
             case SCANCODE_ENTER: sKeyboardButtons |= PAD_BUTTON_A;            return true;
         }
     }
-
     return false;
 }
 
