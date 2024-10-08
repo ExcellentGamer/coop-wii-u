@@ -98,7 +98,9 @@ bool         configCameraInvertX = false;
 bool         configCameraInvertY = true;
 bool         configEnableCamera  = true;
 bool         configCameraAnalog  = true;
+#ifndef TARGET_WII_U
 bool         configCameraMouse   = false;
+#endif
 #endif
 bool         configSkipIntro     = 0;
 bool         configShareLives    = 0;
@@ -163,7 +165,9 @@ static const struct ConfigOption options[] = {
     #ifdef BETTERCAMERA
     {.name = "bettercam_enable",     .type = CONFIG_TYPE_BOOL, .boolValue = &configEnableCamera},
     {.name = "bettercam_analog",     .type = CONFIG_TYPE_BOOL, .boolValue = &configCameraAnalog},
+#ifndef TARGET_WII_U
     {.name = "bettercam_mouse_look", .type = CONFIG_TYPE_BOOL, .boolValue = &configCameraMouse},
+#endif
     {.name = "bettercam_invertx",    .type = CONFIG_TYPE_BOOL, .boolValue = &configCameraInvertX},
     {.name = "bettercam_inverty",    .type = CONFIG_TYPE_BOOL, .boolValue = &configCameraInvertY},
     {.name = "bettercam_xsens",      .type = CONFIG_TYPE_UINT, .uintValue = &configCameraXSens},

@@ -1,5 +1,7 @@
 #include "djui.h"
+#ifndef TARGET_WII_U
 #include "pc/controller/controller_mouse.h"
+#endif
 #include "pc/controller/controller_sdl.h"
 #include "pc/controller/controller_wiiu.h"
 #include "pc/gfx/gfx_window_manager_api.h"

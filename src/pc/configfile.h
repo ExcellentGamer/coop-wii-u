@@ -65,7 +65,9 @@ extern unsigned int configCameraDegrade;
 extern bool         configCameraInvertX;
 extern bool         configCameraInvertY;
 extern bool         configEnableCamera;
+#ifndef TARGET_WII_U
 extern bool         configCameraMouse;
+#endif
 extern bool         configCameraAnalog;
 #endif
 extern bool         configHUD;
