@@ -47,6 +47,7 @@ static void djui_chat_box_input_escape(struct DjuiInputbox* chatInput) {
     if (gDjuiChatBoxFocus) { djui_chat_box_toggle(); }
 }
 
+#ifndef TARGET_WII_U
 static bool djui_chat_box_input_on_key_down(struct DjuiBase* base, int scancode) {
     if (gDjuiChatBox == NULL) { return false; }
     f32 yMax = gDjuiChatBox->chatContainer->base.elem.height - gDjuiChatBox->chatFlow->base.height.value;
@@ -78,6 +79,7 @@ static bool djui_chat_box_input_on_key_down(struct DjuiBase* base, int scancode)
         default: return djui_inputbox_on_key_down(base, scancode);
     }
 }
+#endif
 
 void djui_chat_box_toggle(void) {
     if (gDjuiChatBox == NULL) { return; }
@@ -128,7 +130,9 @@ struct DjuiChatBox* djui_chat_box_create(void) {
     djui_base_set_size_type(ciBase, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
     djui_base_set_size(ciBase, 1.0f, 32);
     djui_base_set_alignment(ciBase, DJUI_HALIGN_LEFT, DJUI_VALIGN_BOTTOM);
+#ifndef TARGET_WII_U
     djui_interactable_hook_key(&chatInput->base, djui_chat_box_input_on_key_down, djui_inputbox_on_key_up);
+#endif
     chatBox->chatInput = chatInput;
 
     gDjuiChatBox = chatBox;

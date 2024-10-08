@@ -5,7 +5,9 @@
 #include "../configfile.h"
 
 #include "controller_recorded_tas.h"
+#ifndef TARGET_WII_U
 #include "controller_keyboard.h"
+#endif
 #include "controller_sdl.h"
 #include "controller_wiiu.h"
 
@@ -20,7 +22,9 @@ static struct ControllerAPI *controller_implementations[] = {
     #if defined(CAPI_SDL2) || defined(CAPI_SDL1)
     &controller_sdl,
     #endif
+#ifndef TARGET_WII_U
     &controller_keyboard,
+#endif
 #endif
 };
 

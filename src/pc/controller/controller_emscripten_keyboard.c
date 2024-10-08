@@ -3,7 +3,10 @@
 #include <string.h>
 #include <emscripten/html5.h>
 #include "macros.h"
+
+#ifndef TARGET_WII_U
 #include "controller_keyboard.h"
+#endif
 
 static const struct {
     const char *code;
@@ -121,6 +124,7 @@ static const struct {
 };
 
 static EM_BOOL controller_emscripten_keyboard_handler(int event_type, const EmscriptenKeyboardEvent *key_event, UNUSED void *user_data) {
+#ifndef TARGET_WII_U
     for (size_t i = 0; i < sizeof(keymap_browser) / sizeof(keymap_browser[0]); i++) {
         if (strcmp(key_event->code, keymap_browser[i].code) == 0) {
             if (event_type == EMSCRIPTEN_EVENT_KEYDOWN) {
@@ -132,20 +136,25 @@ static EM_BOOL controller_emscripten_keyboard_handler(int event_type, const Emsc
         }
     }
     return EM_FALSE;
+#endif
 }
 
 static EM_BOOL controller_emscripten_keyboard_blur_handler(UNUSED int event_type, UNUSED const EmscriptenFocusEvent *focus_event, UNUSED void *user_data) {
+#ifndef TARGET_WII_U
     keyboard_on_all_keys_up();
     return EM_TRUE;
+#endif
 }
 
 void controller_emscripten_keyboard_init(void) {
+#ifndef TARGET_WII_U
     // Should be #window according to docs, but that crashes
     const char *target = EMSCRIPTEN_EVENT_TARGET_WINDOW;
 
     emscripten_set_keydown_callback(target, NULL, EM_FALSE, controller_emscripten_keyboard_handler);
     emscripten_set_keyup_callback(target, NULL, EM_FALSE, controller_emscripten_keyboard_handler);
     emscripten_set_blur_callback(target, NULL, EM_FALSE, controller_emscripten_keyboard_blur_handler);
+#endif
 }
 
 #endif

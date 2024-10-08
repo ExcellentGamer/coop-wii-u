@@ -4,7 +4,10 @@
 #include "pc/gfx/gfx_window_manager_api.h"
 #include "pc/pc_main.h"
 #include "game/segment2.h"
+
+#ifndef TARGET_WII_U
 #include "pc/controller/controller_keyboard.h"
+#endif
 
 #define DJUI_INPUTBOX_YOFF (-2)
 #define DJUI_INPUTBOX_MAX_BLINK 50
@@ -38,6 +41,7 @@ void djui_inputbox_select_all(struct DjuiInputbox* inputbox) {
     inputbox->selection[0] = strlen(inputbox->buffer);
 }
 
+#ifndef TARGET_WII_U
 void djui_inputbox_hook_enter_press(struct DjuiInputbox* inputbox, void (*on_enter_press)(struct DjuiInputbox*)) {
     inputbox->on_enter_press = on_enter_press;
 }
@@ -45,6 +49,7 @@ void djui_inputbox_hook_enter_press(struct DjuiInputbox* inputbox, void (*on_ent
 void djui_inputbox_hook_escape_press(struct DjuiInputbox* inputbox, void (*on_escape_press)(struct DjuiInputbox*)) {
     inputbox->on_escape_press = on_escape_press;
 }
+#endif
 
 static void djui_inputbox_set_default_style(struct DjuiBase* base) {
     struct DjuiInputbox* inputbox = (struct DjuiInputbox*)base;
@@ -157,6 +162,7 @@ static void djui_inputbox_delete_selection(struct DjuiInputbox *inputbox) {
 }
 
 bool djui_inputbox_on_key_down(struct DjuiBase *base, int scancode) {
+#ifndef TARGET_WII_U
     struct DjuiInputbox *inputbox = (struct DjuiInputbox *) base;
     u16 *sel = inputbox->selection;
     char *msg = inputbox->buffer;
@@ -280,8 +286,10 @@ bool djui_inputbox_on_key_down(struct DjuiBase *base, int scancode) {
     }
 
     return true;
+#endif
 }
 
+#ifndef TARGET_WII_U
 void djui_inputbox_on_key_up(UNUSED struct DjuiBase *base, int scancode) {
     switch (scancode) {
         case SCANCODE_CONTROL_LEFT:  sHeldControl &= ~(1 << 0); break;
@@ -290,6 +298,7 @@ void djui_inputbox_on_key_up(UNUSED struct DjuiBase *base, int scancode) {
         case SCANCODE_SHIFT_RIGHT:   sHeldShift   &= ~(1 << 1); break;
     }
 }
+#endif
 
 static void djui_inputbox_on_focus_begin(UNUSED struct DjuiBase* base) {
     sHeldControl = 0;
@@ -546,7 +555,9 @@ struct DjuiInputbox* djui_inputbox_create(struct DjuiBase* parent, u16 bufferSiz
     djui_interactable_create(base);
     djui_interactable_hook_hover(base, djui_inputbox_on_hover, djui_inputbox_on_hover_end);
     djui_interactable_hook_cursor_down(base, djui_inputbox_on_cursor_down_begin, djui_inputbox_on_cursor_down, djui_inputbox_on_cursor_down_end);
+#ifndef TARGET_WII_U
     djui_interactable_hook_key(base, djui_inputbox_on_key_down, djui_inputbox_on_key_up);
+#endif
     djui_interactable_hook_focus(base, djui_inputbox_on_focus_begin, NULL, djui_inputbox_on_focus_end);
     djui_interactable_hook_text_input(base, djui_inputbox_on_text_input);
     djui_interactable_hook_enabled_change(base, djui_inputbox_set_default_style);

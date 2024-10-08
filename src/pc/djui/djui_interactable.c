@@ -1,9 +1,12 @@
 #include <string.h>
 #include "djui.h"
 
+#ifndef TARGET_WII_U
 #include "src/pc/controller/controller_sdl.h"
 #include "src/pc/controller/controller_mouse.h"
 #include "src/pc/controller/controller_keyboard.h"
+#endif
+
 #include "src/pc/controller/controller_wiiu.h"
 #include "src/pc/utils/misc.h"
 
@@ -107,10 +110,12 @@ static void djui_interactable_on_value_change(struct DjuiBase* base) {
 }
 
 static void djui_interactable_on_bind(struct DjuiBase* base) {
+#ifndef TARGET_WII_U
     if (base                        == NULL) { return; }
     if (base->interactable          == NULL) { return; }
     if (base->interactable->on_bind == NULL) { return; }
     base->interactable->on_bind(base);
+#endif
 }
 
 static void djui_interactable_cursor_update_active(struct DjuiBase* base) {
@@ -141,15 +146,19 @@ static void djui_interactable_cursor_update_active(struct DjuiBase* base) {
 }
 
 bool djui_interactable_is_binding(void) {
+#ifndef TARGET_WII_U
     return sInteractableBinding != NULL;
+#endif
 }
 
 void djui_interactable_set_binding(struct DjuiBase* base) {
+#ifndef TARGET_WII_U
     sInteractableBinding = base;
     djui_cursor_set_visible(base == NULL);
     if (base == NULL) {
         sIgnoreInteractableUntilCursorReleased = true;
     }
+#endif
 }
 
 void djui_interactable_set_input_focus(struct DjuiBase* base) {
@@ -164,6 +173,7 @@ bool djui_interactable_is_input_focus(struct DjuiBase* base) {
 }
 
 bool djui_interactable_on_key_down(int scancode) {
+#ifndef TARGET_WII_U
     if (sInteractableBinding != NULL) {
         return true;
     }
@@ -190,9 +200,7 @@ bool djui_interactable_on_key_down(int scancode) {
     if (gDjuiChatBox != NULL && !gDjuiChatBoxFocus) {
         bool pressChat = false;
         for (int i = 0; i < MAX_BINDS; i++) {
-#ifndef TARGET_WII_U
             if (scancode == (int)configKeyChat[i]) { pressChat = true; }
-#endif
         }
 
         if (pressChat) {
@@ -210,10 +218,11 @@ bool djui_interactable_on_key_down(int scancode) {
         }
     }
     return false;
+#endif
 }
 
 void djui_interactable_on_key_up(int scancode) {
-
+#ifndef TARGET_WII_U
     bool keyFocused = (sInteractableFocus != NULL)
                    && (sInteractableFocus->interactable != NULL)
                    && (sInteractableFocus->interactable->on_key_up != NULL);
@@ -233,6 +242,7 @@ void djui_interactable_on_key_up(int scancode) {
         case SCANCODE_RIGHT: if (sKeyboardHoldDirection == PAD_HOLD_DIR_RIGHT) { sKeyboardHoldDirection = PAD_HOLD_DIR_NONE; pad->stick_x = 0; } break;
         case SCANCODE_ENTER: sKeyboardButtons &= ~PAD_BUTTON_A; break;
     }
+#endif
 }
 
 void djui_interactable_on_text_input(char* text) {
@@ -425,6 +435,7 @@ void djui_interactable_hook_bind(struct DjuiBase* base,
     interactable->on_bind = on_bind;
 }
 
+#ifndef TARGET_WII_U
 void djui_interactable_hook_key(struct DjuiBase* base,
                                  bool (*on_key_down)(struct DjuiBase*, int),
                                  void (*on_key_up)(struct DjuiBase*, int)) {
@@ -433,6 +444,7 @@ void djui_interactable_hook_key(struct DjuiBase* base,
     interactable->on_key_up   = on_key_up;
 
 }
+#endif
 
 void djui_interactable_hook_text_input(struct DjuiBase *base,
                                        void (*on_text_input)(struct DjuiBase*, char*)) {

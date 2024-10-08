@@ -6,6 +6,8 @@
 #define PAD_BUTTON_B     ((u16)(1 << 14))
 #define PAD_BUTTON_START ((u16)(1 << 12))
 
+#ifndef TARGET_WII_U
+
 #define MOUSE_BUTTON_1  ((u16)(1 << 0))
 
 #define SCANCODE_UP        328
@@ -15,10 +17,11 @@
 #define SCANCODE_PAGE_DOWN 337
 #define SCANCODE_PAGE_UP   329
 
-
 #define SCANCODE_ENTER  28
 #define SCANCODE_SPACE  57
 #define SCANCODE_ESCAPE 1
+
+#endif
 
 #pragma pack(1)
 struct DjuiInteractable {
@@ -77,9 +80,11 @@ void djui_interactable_hook_value_change(struct DjuiBase* base,
 void djui_interactable_hook_bind(struct DjuiBase* base,
                                  void (*on_bind)(struct DjuiBase*));
 
+#ifndef TARGET_WII_U
 void djui_interactable_hook_key(struct DjuiBase* base,
                                  bool (*on_key_down)(struct DjuiBase*, int),
                                  void (*on_key_up)(struct DjuiBase*, int));
+#endif
 
 void djui_interactable_hook_text_input(struct DjuiBase* base,
                                        void (*on_text_input)(struct DjuiBase*, char*));

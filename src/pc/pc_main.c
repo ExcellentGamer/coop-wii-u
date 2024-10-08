@@ -32,7 +32,9 @@
 #include "cliopts.h"
 #include "configfile.h"
 #include "controller/controller_api.h"
+#ifndef TARGET_WII_U
 #include "controller/controller_keyboard.h"
+#endif
 #include "fs/fs.h"
 
 #include "game/game_init.h"
@@ -280,9 +282,9 @@ void main_func(void) {
 #endif
 
     gfx_init(wm_api, rendering_api, window_title);
-    #ifndef TARGET_WII_U
+#ifndef TARGET_WII_U
     wm_api->set_keyboard_callbacks(keyboard_on_key_down, keyboard_on_key_up, keyboard_on_all_keys_up, keyboard_on_text_input);
-    #endif
+#endif
 
     #if defined(AAPI_SDL1) || defined(AAPI_SDL2)
     if (audio_api == NULL && audio_sdl.init()) 
