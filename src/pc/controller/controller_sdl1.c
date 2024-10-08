@@ -143,8 +143,15 @@ static void controller_sdl_init(void) {
 
 static inline void update_button(const int i, const bool new) {
     const bool pressed = !joy_buttons[i] && new;
+    const bool unpressed = joy_buttons[i] && !new;
     joy_buttons[i] = new;
-    if (pressed) last_joybutton = i;
+    if (pressed) {
+        last_joybutton = i;
+        djui_interactable_on_key_down(VK_BASE_SDL_GAMEPAD + i);
+    }
+    if (unpressed) {
+        djui_interactable_on_key_up(VK_BASE_SDL_GAMEPAD + i);
+    }
 }
 
 static inline int16_t get_axis(const int i) {

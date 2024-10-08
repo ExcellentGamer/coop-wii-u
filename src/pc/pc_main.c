@@ -32,6 +32,7 @@
 #include "cliopts.h"
 #include "configfile.h"
 #include "controller/controller_api.h"
+#include "controller/controller_wiiu.h"
 #ifndef TARGET_WII_U
 #include "controller/controller_keyboard.h"
 #endif

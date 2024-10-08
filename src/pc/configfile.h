@@ -50,6 +50,7 @@ extern unsigned int configKeyStickDown[];
 extern unsigned int configKeyStickLeft[];
 extern unsigned int configKeyStickRight[];
 extern unsigned int configKeyChat[];
+extern unsigned int configKeyPlayerList[];
 #endif
 extern unsigned int configStickDeadzone;
 extern unsigned int configRumbleStrength;
