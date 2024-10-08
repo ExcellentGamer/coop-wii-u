@@ -44,10 +44,13 @@ static void enemy_lakitu_update_vel_y(f32 offsetY) {
     }
 
     struct Object* player = nearest_player_to_object(o);
-    if (o->oPosY < player->oPosY + offsetY + margin) {
-        obj_y_vel_approach(4.0f, 0.4f);
-    } else {
-        obj_y_vel_approach(-4.0f, 0.4f);
+    if (player != NULL) {
+        if (o->oPosY < player->oPosY + offsetY + margin) {
+            obj_y_vel_approach(4.0f, 0.4f);
+        }
+        else {
+            obj_y_vel_approach(-4.0f, 0.4f);
+        }
     }
 }
 
@@ -102,8 +105,11 @@ static void enemy_lakitu_sub_act_no_spiny(void) {
     int distanceToPlayer = dist_between_objects(o, player);
     int angleToPlayer = obj_angle_to_object(o, player);
 
+    treat_far_home_as_mario(2000.0f, &distanceToPlayer, &angleToPlayer);
+
     cur_obj_init_animation_with_sound(1);
 
+    o->oEnemyLakituNumSpinies = cur_obj_count_objects_with_behavior(bhvSpiny, 2000);
     if (o->oEnemyLakituSpinyCooldown != 0) {
         o->oEnemyLakituSpinyCooldown -= 1;
     } else if (o->oEnemyLakituNumSpinies < 3 && distanceToPlayer < 800.0f
@@ -135,9 +141,17 @@ static void enemy_lakitu_sub_act_no_spiny(void) {
  * enter the throw spiny sub-action.
  */
 static void enemy_lakitu_sub_act_hold_spiny(void) {
+    if (o->prevObj == NULL) {
+        o->oSubAction = ENEMY_LAKITU_SUB_ACT_NO_SPINY;
+        o->oEnemyLakituSpinyCooldown = 0;
+        return;
+    }
+
     struct Object* player = nearest_player_to_object(o);
     int distanceToPlayer = dist_between_objects(o, player);
     int angleToPlayer = obj_angle_to_object(o, player);
+
+    treat_far_home_as_mario(2000.0f, &distanceToPlayer, &angleToPlayer);
 
     cur_obj_init_anim_extend(3);
 
@@ -172,6 +186,7 @@ static void enemy_lakitu_sub_act_throw_spiny(void) {
  * Main update function.
  */
 static void enemy_lakitu_act_main(void) {
+    cur_obj_unhide();
     cur_obj_play_sound_1(SOUND_AIR_LAKITU_FLY);
 
     cur_obj_update_floor_and_walls();
@@ -182,6 +197,12 @@ static void enemy_lakitu_act_main(void) {
     }
 
     obj_update_blinking(&o->oEnemyLakituBlinkTimer, 20, 40, 4);
+
+    if (o->prevObj != NULL) {
+        if (o->prevObj->behavior != bhvSpiny || o->prevObj->activeFlags == ACTIVE_FLAG_DEACTIVATED) {
+            o->prevObj = NULL;
+        }
+    }
 
     switch (o->oSubAction) {
         case ENEMY_LAKITU_SUB_ACT_NO_SPINY:
@@ -195,7 +216,11 @@ static void enemy_lakitu_act_main(void) {
             break;
     }
 
-    cur_obj_move_standard(78);
+    struct Object* player = nearest_player_to_object(o);
+    int distanceToPlayer = dist_between_objects(o, player);
+    if (distanceToPlayer <= o->oDrawingDistance) {
+        cur_obj_move_standard(78);
+    }
 
     // Die and drop held spiny when attacked by mario
     if (obj_check_attacks(&sEnemyLakituHitbox, o->oAction)) {
@@ -216,7 +241,7 @@ void bhv_enemy_lakitu_update(void) {
         network_init_object_field(o, &o->oEnemyLakituFaceForwardCountdown);
     }
 
-    treat_far_home_as_mario(2000.0f);
+    treat_far_home_as_mario(2000.0f, NULL, NULL);
 
     switch (o->oAction) {
         case ENEMY_LAKITU_ACT_UNINITIALIZED:
